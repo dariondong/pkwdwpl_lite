@@ -281,18 +281,48 @@ Dart API 与上游 100% 一致；想换回 pub.dev 官方包改一行注释即�
   targetSdk  = flutter.targetSdkVersion    // Flutter 3.47 = 36
   ```
 
-  满足「至少 API 34」的要求，并且用 `check()` 把这条钉死：
-  一旦将来 Flutter 把默认值降到 34 以下，配置阶段会立刻报错，而不是静默失守。
+  满足「至少 API 34」的要求；这条由 CI 的 **Check SDK API level (>= 34)** 步骤守着
+  （它直接读 Flutter SDK 里 `FlutterExtension.kt` 的取值断言 ≥ 34 ——
+  之所以不写成 Gradle 里的 `check()`，是为了让 app 的 Gradle 脚本尽量贴近官方模板，
+  见下面的踩坑记录）。
 
-  > ⚠️ **踩坑记录（2026-09-11）**：这三个值**必须写成 `flutter.xxxVersion` 这种扩展形式**，
-  > 不要写成字面量。写成 `compileSdk = 36` 时，AGP 9.1 在**配置阶段**直接报
-  > `Android Gradle Plugin: project ':app' does not specify compileSdk`，
-  > 构建失败，而且日志里没有任何前置错误提示，极难定位。
-  > 另外 Flutter 工具链每次构建前都会自动「迁移」这个文件（例如把
-  > `minSdk = 23` 改写成 `minSdk = flutter.minSdkVersion`，日志里会打印
-  > `Upgrading build.gradle.kts`），所以**不要依赖字面量**。
-  > CI（`.github/workflows/ci.yml`）里已加了一个失败时 dump 该文件内容的步骤，
-  > 方便下次直接看到「迁移之后」的实情。
+  > ### ⚠️ 踩坑记录（2026-09-11，花了 7 轮 CI 才定位）
+  >
+  > **真正的坑：`permission_handler` 的传递依赖要求更高的 compileSdk。**
+  >
+  > 项目最初写的是 `permission_handler: ^13.0.2`，它会拉入
+  > `permission_handler_android 14.1.0`，而那个包的 `android/build.gradle` 里写着
+  > `compileSdk = 37`；但 Flutter 3.47 的 `flutter.compileSdkVersion` 与
+  > **AGP 9.1 的最高推荐值都只有 36**。结果编译时永远失败：
+  >
+  > ```
+  > Warning: The plugin permission_handler_android requires Android SDK version 37 or higher.
+  > Execution failed for task ':app:checkDebugAarMetadata'.
+  > > Dependency ':permission_handler_android' requires ... compile against version 37 or later
+  >   of the Android APIs. :app is currently compiled against android-36.
+  >   Also, the maximum recommended compile SDK version for Android Gradle plugin 9.1.0 is 36.
+  > ```
+  >
+  > **解法：把 `permission_handler` 钉在 `12.0.3`** —— 它依赖
+  > `permission_handler_android 13.0.1`，后者只要求 compileSdk 35。
+  > **升级 permission_handler 前请先确认新版本传递依赖的 compileSdk 要求**
+  > （本机可查：`grep compileSdk ~/.pub-cache/hosted/pub.dev/permission_handler_android-*/android/build.gradle`）。
+  >
+  > **另外两个容易带偏方向的假象：**
+  >
+  > 1. 排查中途 AGP 报过
+  >    `Android Gradle Plugin: project ':app' does not specify compileSdk `
+  >    —— 这是**下游症状**，不是根因；当时我把注意力全放在了
+  >    Gradle 脚本的写法上，绕了不少弯路。
+  > 2. Flutter 工具链每次构建前都会自动「迁移」`android/app/build.gradle.kts`
+  >    （比如把 `minSdk = 23` 改写成 `minSdk = flutter.minSdkVersion`，日志里会打印
+  >    `Upgrading build.gradle.kts`）。这个迁移本身是无害的，别把它当成元凶。
+  >
+  > **经验：** app 的 `build.gradle.kts` 尽量与 `flutter create` 模板保持一致
+  > （SDK 版本统一用 `flutter.xxxVersion`，不要破坏官方签名写法），
+  > 自定义逻辑越少，AGP 配置阶段出怪问题的概率越低。
+  > CI（`.github/workflows/ci.yml`）里保留了两个失败时的诊断步骤：
+  > dump 关键文件 + 只跑配置阶段并输出完整堆栈。
 * 权限：
   * API ≤ 30：`BLUETOOTH` / `BLUETOOTH_ADMIN` / `ACCESS_FINE_LOCATION`（带 `maxSdkVersion="30"`）
   * API ≥ 31：`BLUETOOTH_SCAN`（`neverForLocation`）/ `BLUETOOTH_CONNECT`
