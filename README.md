@@ -8,6 +8,8 @@
 > * **数据协议**：Kenwood `$PKWDWPL`（NMEA 0183，14 字段，`\r\n` 结尾）
 > * **平台**：Android（Flutter，API 23+）
 > * 包名 / applicationId：`top.theez.pkwdwpl_lite`（可按需改）
+>
+> **许可 / License**：[GNU GPL v3.0](LICENSE) · 第三方资源与来源见 [NOTICE](NOTICE)
 
 ---
 
