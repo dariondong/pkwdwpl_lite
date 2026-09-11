@@ -16,7 +16,7 @@
 ```bash
 flutter pub get
 flutter analyze     # → No issues found!
-flutter test        # → 62 个测试全部通过
+flutter test        # → 80 个测试全部通过
 ```
 
 特别地：`test/real_capture_test.dart` 把 **BH7NOR 采集的 10 条真实 `$PKWDWPL` 报文**
@@ -82,25 +82,45 @@ python3 tool/gen_launcher_icon.py --bg green --no-ring # 换成绿底
 
 ## 2. 界面与交互（按需求定制）
 
-底部三个 tab：**台站（主页）· 连接 · 关于**；详情页与离线地图从列表进入。
+**没有底部导航**（按需求隐藏菜单）：启动即进台站列表，其余入口全在右上角的「三个点」里。
 
 ### 台站列表（主页）
 
-每一行的格式就是需求里要的那份：
+**一个信标只占一行**，固定列布局、所有字段同一字号（就是呼号的字号，呼号不加粗）：
 
 ```
- #序号 | 图标 | 呼号 | 方向 | 距离(KM/MI) | 接收时间
-  #12  |  🚗  | BG1UBU-9  |  ↑83°  | 52.0 km · 10:23:53
+ #序号   呼号 图标   方向   距离       时间
+  #12   BG1UBU-9 🚗     ↑     52.0 km   10:23:53
 ```
 
 * **接收序号**：第几条成功解析的语句（和串口日志逐条对齐用）；
-* **图标**：APRS 官方符号 PNG（来自图标包，见 1.5 节），缺失时回退 Material 图标；
-* **方向**：按航向旋转的箭头 + 度数（无航向显示 `--`）；
-* **距离**：AppBar 右上角一个 **KM ⇄ MI** 按钮实时切换；
-  若设置了本机参考坐标，距离用 Haversine 实算并加 `*` 标注，否则显示报文第 11 字段；
+* **呼号**：等宽字体；**设备图标在呼号右侧**（APRS 官方符号 PNG，见 1.5 节）；
+* **方向**：只画一个按航向旋转的**箭头，不显示度数**（0° = 正北）；无航向显示 `--`；
+* **距离**：菜单里一键 **KM ⇄ MI**；若设置了本机参考坐标则用 Haversine 实算，
+  否则显示报文第 11 字段；
 * **接收时间**：`HH:mm:ss`（本地时区）；
-* **单击 → 详情页**；**双击 → 离线地图并把该台站居中**（需求原文：double-tap 跳转并居中）；
-* 顶部统计条：台站数 / 有效 / 校验失败 / 格式错误 / 存疑，以及筛选（全部 · 仅有效 · 仅存疑）。
+* **单击 → 详情页**；**双击 → 离线地图并把该台站居中**；
+* 列表上方只有**一行**很轻的状态条：连接状态点（绿=已连）+ 台站数 + 最后更新时间。
+
+> 界面约束**有自动化测试守护**：`test/station_row_layout_test.dart` 断言
+> 「每个列表项高度固定 38（不得因换行被撑高）」「所有列字号一致且呼号不加粗」
+> 「切换英制单位后仍为单行」。
+>
+> 改界面时建议先渲染预览图肉眼核对：
+> `flutter test test/tools/ui_preview.dart` → `build/ui_preview/list_page.png`
+> （测试环境无中文字体，截图里中文是方块，但**布局问题一目了然** ——
+> 当初就是靠它发现时间列与方向列被竖向折行、破坏了「一行一信标」的。）
+
+### 三个点菜单
+
+| 菜单项 | 说明 |
+| --- | --- |
+| 连接 | 蓝牙连接页（含演示模式、严格校验、参考坐标、底图设置）|
+| 离线地图 | 打开离网地图（不联网、不需 GPS）|
+| 距离单位 | 直接显示当前值（`KM` / `MI`），点一下即切 |
+| 语言 | 直接显示当前值（`中` / `EN`），点一下即切 |
+| 清空 | 有数据时才出现 |
+| 关于 | App 名称 / 版本 / 作者 BG7LZQ / 协议提供者 BH7NOR |
 
 ### 台站详情（台账）
 
@@ -164,14 +184,16 @@ pkwdwpl_lite/
 │   │   ├── bluetooth_service_mock.dart   # 演示数据源（真实台站数据）
 │   │   └── bluetooth_service_factory.dart
 │   ├── pages/
-│   │   ├── home_shell.dart         # 底部 tab
+│   │   ├── app_theme.dart          # ★ 绿白配色 + 列宽/字号（改一处就够）
+│   │   ├── home_shell.dart         # 主框架（无底部导航，仅列表页）
 │   │   ├── bluetooth_page.dart     # 页面 1：蓝牙连接页 + 设置
 │   │   ├── station_list_page.dart  # 页面 2：台站列表（主页面）
 │   │   ├── station_detail_page.dart# 页面 3：台站详情（台账）
 │   │   ├── offline_map_page.dart   # 页面 5：离线地图（双击进入，居中对齐）
 │   │   └── about_page.dart         # 页面 4：关于
 │   └── main.dart
-├── test/                           # 62 个测试（含真实报文回归）
+├── test/                           # 80 个测试（含真实报文回归 + 界面约束）
+│   └── tools/ui_preview.dart       # 界面预览图导出工具（非测试，需显式指路径跑）
 ├── third_party/flutter_bluetooth_serial_plus/   # ★ 内置蓝牙插件（已打 CI 兼容补丁）
 ├── tool/{gen_keystore.py, set_github_secrets.py, sync_version.py, update_vendored_plugin.py}
 ├── tool/{gen_launcher_icon.py, update_aprs_symbols.py}
