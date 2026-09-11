@@ -79,5 +79,11 @@
             <action android:name="android.intent.action.PROCESS_TEXT" />
             <data android:mimeType="text/plain" />
         </intent>
+        <!-- Android 11+ 的包可见性限制：不声明的话「关于」页里
+             打开 APRSLocus 官网/下载页的 https 链接会失败。 -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
     </queries>
 </manifest>

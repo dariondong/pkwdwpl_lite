@@ -19,6 +19,12 @@ class AppInfo {
   /// 技术接口协议提供者。
   static const String protocolProvider = 'BH7NOR';
 
+  /// 支持者 / 支持单位（可以放多位，关于页会自动逐条列出）。
+  ///
+  /// 如果你的称呼不是「支持」而是「测试 / 贡献 / 硬件支持」等，
+  /// 改翻译文件里的 `about.support` 这一条即可（zh-CN.json / en-US.json）。
+  static const List<String> supporters = <String>['BA3RZL'];
+
   /// 包名。
   static const String packageName = 'pkwdwpl_lite';
 
@@ -33,4 +39,25 @@ class AppInfo {
 
   static String get versionLabel =>
       buildNumber.isEmpty ? appVersion : '$appVersion+$buildNumber';
+
+  // ---------------------------------------------------------------------------
+  // 作者的另一款作品（关于页里做推荐）
+  // ---------------------------------------------------------------------------
+
+  /// 推荐 App 的名称。
+  static const String relatedAppName = 'APRSLocus';
+
+  /// 推荐 App 的官网（同时也是下载入口）。
+  static const String relatedAppWebsite = 'https://aprslocus.theez.top/';
+
+  /// 推荐 App 的 GitHub 仓库（看源码 / 提 issue）。
+  static const String relatedAppRepository =
+      'https://github.com/dariondong/APRSLocus';
+
+  /// 推荐 App 的发布页（拿最新安装包）。
+  static const String relatedAppReleases =
+      'https://github.com/dariondong/APRSLocus/releases';
+
+  /// 作者主页。
+  static const String authorHomepage = 'https://theez.top';
 }

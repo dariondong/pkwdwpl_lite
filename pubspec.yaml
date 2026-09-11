@@ -29,6 +29,11 @@ dependencies:
   # 设置项持久化（严格校验开关、演示模式、本机坐标等）
   shared_preferences: ^2.5.5
 
+  # 关于页里的可点击链接（推荐 APRSLocus 时打开官网 / 下载页）
+  # 选它是因为其 android 实现用 compileSdk = flutter.compileSdkVersion，
+  # 不会像 permission_handler 那样把 compileSdk 抬到 37 导致编译失败。
+  url_launcher: ^6.3.2
+
   # 蓝牙运行时权限（Android 12+ 的 BLUETOOTH_SCAN / BLUETOOTH_CONNECT）
   #
   # ⚠️ 版本必须钉在 12.x：13.0.2 会拉入 permission_handler_android 14.1.0，
