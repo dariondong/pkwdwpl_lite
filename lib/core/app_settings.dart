@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/geo_math.dart';
 import '../models/map_bounds.dart';
+import 'app_theme.dart' show ListScale;
 
 /// 字段 11（`000050`）的含义。
 ///
@@ -62,6 +63,8 @@ class AppSettings extends ChangeNotifier {
   static const String _kRefLon = 'reference_longitude';
   static const String _kDistanceUnit = 'distance_unit';
   static const String _kField11 = 'field11_meaning';
+  static const String _kListScale = 'list_scale';
+  static const String _kShowSeconds = 'show_seconds';
   static const String _kMapImagePath = 'map_image_path';
   static const String _kMapMinLat = 'map_min_lat';
   static const String _kMapMaxLat = 'map_max_lat';
@@ -86,6 +89,15 @@ class AppSettings extends ChangeNotifier {
       _prefs.getString(_kDistanceUnit) == DistanceUnit.imperial.name
           ? DistanceUnit.imperial
           : DistanceUnit.metric;
+
+  /// 列表界面缩放档位（默认标准）。
+  ListScale get listScale =>
+      ListScale.fromName(_prefs.getString(_kListScale));
+
+  /// 列表时间是否显示到秒（默认不显示，只到分）。
+  ///
+  /// 不显示秒能给呼号腾出宽度，是小屏 + 大档位下不溢出的关键。
+  bool get showSeconds => _prefs.getBool(_kShowSeconds) ?? false;
 
   /// 字段 11 的含义（默认按千米距离）。
   Field11Meaning get field11Meaning {
@@ -140,6 +152,22 @@ class AppSettings extends ChangeNotifier {
     await _prefs.setString(_kDistanceUnit, value.name);
     notifyListeners();
   }
+
+  /// 设置列表缩放档位。
+  Future<void> setListScale(ListScale value) async {
+    await _prefs.setString(_kListScale, value.name);
+    notifyListeners();
+  }
+
+  /// 切到下一档缩放（菜单里点一下就用这个，循环）。
+  Future<void> cycleListScale() => setListScale(listScale.next);
+
+  Future<void> setShowSeconds(bool value) async {
+    await _prefs.setBool(_kShowSeconds, value);
+    notifyListeners();
+  }
+
+  Future<void> toggleShowSeconds() => setShowSeconds(!showSeconds);
 
   /// 在 KM / MI 之间切换（列表页右上角按钮用）。
   Future<void> toggleDistanceUnit() => setDistanceUnit(

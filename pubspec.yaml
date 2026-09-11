@@ -4,7 +4,7 @@ description: >-
   APRS 台站接收与台账 App。作者/开发者: BG7LZQ；技术接口协议提供者: BH7NOR。
 publish_to: "none" # 私有项目，防止误发布到 pub.dev
 
-version: 1.1.1+3
+version: 1.1.2+4
 environment:
   sdk: ^3.9.0
   flutter: ">=3.35.0"

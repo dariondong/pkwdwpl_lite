@@ -127,6 +127,12 @@
     "warn_checksum": "NMEA checksum mismatch — this record may be corrupted or mistyped"
   },
   "settings": {
+    "list_scale": "List scale",
+    "show_seconds": "Show seconds",
+    "list_scale_small": "Small",
+    "list_scale_normal": "Normal",
+    "list_scale_large": "Large",
+    "list_scale_huge": "Extra large",
     "distance_unit": "Distance unit",
     "field11_meaning": "Field 11 meaning",
     "field11_hint": "On some firmwares this field is a distance, on others a speed. Pick what your radio actually reports.",

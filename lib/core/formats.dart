@@ -129,9 +129,17 @@ class Formats {
   static String localDateTime(DateTime time) =>
       DateFormat('yyyy-MM-dd HH:mm:ss').format(time);
 
-  /// 接收时刻只保留时分秒（列表页空间紧张）。
+  /// 接收时刻，精确到秒。
   static String localTimeOnly(DateTime time) =>
       DateFormat('HH:mm:ss').format(time);
+
+  /// 接收时刻，只到分（列表默认格式）。
+  ///
+  /// 秒对「记录日志」用途意义不大，而 `HH:mm` 只占 5 个字符，
+  /// 能把省下的宽度留给呼号 —— 这是小屏 + 大缩放档位下不溢出的关键。
+  /// 需要看秒时，在菜单里开启「显示秒」即可。
+  static String localTimeShort(DateTime time) =>
+      DateFormat('HH:mm').format(time);
 
   /// UTC 时间 → 本地时间（精确到秒）。
   static String localDateTimeOfUtc(DateTime utc) =>

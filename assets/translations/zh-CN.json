@@ -127,6 +127,12 @@
     "warn_checksum": "NMEA 校验和不符，该条数据可能被篡改或抄写错误"
   },
   "settings": {
+    "list_scale": "界面缩放",
+    "show_seconds": "时间显示秒",
+    "list_scale_small": "小",
+    "list_scale_normal": "标准",
+    "list_scale_large": "大",
+    "list_scale_huge": "特大",
     "distance_unit": "距离单位",
     "field11_meaning": "字段 11 含义",
     "field11_hint": "不同固件这一位是距离或速度，按你的实测结果选。",

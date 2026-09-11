@@ -7,22 +7,22 @@ import '../core/formats.dart';
 import '../models/aprs_icon.dart';
 import '../models/aprs_station.dart';
 
-/// 台站列表项 —— **一个信标只用一行**（接收序号已按需求去掉）。
+/// 台站列表项 —— **一个信标只用一行**。
 ///
-/// 固定列布局（各列位置固定）：
+/// 固定列布局（各列位置固定，右侧列宽固定 → 图标位置也就固定了）：
 ///
 /// ```text
-///  呼号 图标   方向   距离       时间
-///  BG1UBU-9 🚗    ↑    52.0 km   10:23:53
+///  呼号         图标 方向   距离       时间
+///  BG1UBU-9     🚗    ↑     50.0 km   10:23:53
 /// ```
 ///
 /// 设计约束：
-/// * 所有字段**字号完全一致**（[AppTheme.listFontSize]，12）且不跟随系统字号
-///   无限放大（[AppTheme.maxListTextScale] 封顶到 1.15）——
-///   否则右侧的距离/时间会被挤没；
+/// * 所有字段**字号完全一致**，且只按用户在菜单里选的 [ListScale] 缩放
+///   （不叠加系统字号 —— 否则列宽与字号错配，右侧字段会被挤掉）；
+/// * **图标紧挨方向箭头**：图标与箭头之间只留 4px（tiget gap），
+///   之前图标跟在呼号后面、方向在右侧，中间会空出一大截；
 /// * 方向**只画箭头、不显示度数**；
-/// * 设备图标放在**呼号右侧**；
-/// * **绝不换行**：超长一律省略号，保证一行一个信标；
+/// * **绝不换行**：超长一律省略号；
 /// * 单击 → 详情页；双击 → 离线地图并居中。
 class StationTile extends StatelessWidget {
   const StationTile({
@@ -41,6 +41,7 @@ class StationTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final AppSettings settings = context.watch<AppSettings>();
+    final ListMetrics m = AppTheme.metricsFor(settings.listScale);
 
     final DistanceView distance = Formats.distance(
       station,
@@ -59,47 +60,49 @@ class StationTile extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       onDoubleTap: onDoubleTap,
-      child: AppTheme.clampTextScale(
+      child: AppTheme.scaledForList(
+        scale: settings.listScale,
         child: SizedBox(
-          height: AppTheme.listRowHeight, // 单行固定行高
+          height: m.rowHeight, // 单行固定行高（随档位缩放）
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
+            padding: EdgeInsets.symmetric(horizontal: 12 * m.scale),
             child: Row(
+              // 全部列宽固定 ⇒ 各列位置完全固定，且整体靠左
+              mainAxisAlignment: MainAxisAlignment.start,
               children: <Widget>[
-                // ① 呼号 + 设备图标（图标在呼号右侧）
+                // ① 呼号（Expanded 吃掉剩余空间；右侧列宽固定 ⇒ 图标位置也固定）
                 Expanded(
-                  child: Row(
-                    children: <Widget>[
-                      Flexible(
-                        child: Text(
-                          station.callsign,
-                          style: mainStyle, // 不加粗、不放大，与其它列同一个字号
-                          maxLines: AppTheme.listMaxLines,
-                          softWrap: AppTheme.listSoftWrap,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const SizedBox(width: 5),
-                      AprsSymbolIcon(
-                        icon: station.iconRaw,
-                        size: AppTheme.listIconSize,
-                        semanticLabel: station.iconLabel,
-                      ),
-                    ],
+                  child: Text(
+                    station.callsign,
+                    style: mainStyle, // 不加粗、不放大，与其它列同字号
+                    maxLines: AppTheme.listMaxLines,
+                    softWrap: AppTheme.listSoftWrap,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                const SizedBox(width: AppTheme.rowGap),
+                SizedBox(width: m.gap),
 
-                // ② 方向：只有箭头，不显示度数
-                SizedBox(
-                  width: AppTheme.colDir,
-                  child: _DirectionArrow(courseDegrees: station.courseDegrees),
+                // ② 设备图标 —— 紧挨着方向箭头
+                AprsSymbolIcon(
+                  icon: station.iconRaw,
+                  size: m.iconSize,
+                  semanticLabel: station.iconLabel,
                 ),
-                const SizedBox(width: AppTheme.rowGap),
+                SizedBox(width: m.tightGap),
 
-                // ③ 距离
+                // ③ 方向：只有箭头，不显示度数
                 SizedBox(
-                  width: AppTheme.colDistance,
+                  width: m.colDir,
+                  child: _DirectionArrow(
+                    courseDegrees: station.courseDegrees,
+                    size: 15 * m.scale, // ≤ colDir，避免图标溢出挤到邻居
+                  ),
+                ),
+                SizedBox(width: m.gap),
+
+                // ④ 距离
+                SizedBox(
+                  width: m.colDistance,
                   child: Text(
                     distance.text ?? '--',
                     style: mainStyle,
@@ -109,13 +112,15 @@ class StationTile extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                const SizedBox(width: AppTheme.rowGap),
+                SizedBox(width: m.gap),
 
-                // ④ 接收时间
+                // ⑤ 接收时间（默认 HH:mm；可在菜单里切换是否显示秒）
                 SizedBox(
-                  width: AppTheme.colTime,
+                  width: m.colTime,
                   child: Text(
-                    Formats.localTimeOnly(station.receivedAt),
+                    settings.showSeconds
+                        ? Formats.localTimeOnly(station.receivedAt)
+                        : Formats.localTimeShort(station.receivedAt),
                     style: subtleStyle,
                     textAlign: TextAlign.right,
                     maxLines: AppTheme.listMaxLines,
@@ -126,10 +131,10 @@ class StationTile extends StatelessWidget {
 
                 // 数据有问题的行：一个很轻的提示图标（不占额外行）
                 if (station.hasWarnings) ...<Widget>[
-                  const SizedBox(width: 4),
+                  SizedBox(width: 4 * m.scale),
                   Icon(
                     Icons.error_outline,
-                    size: 12,
+                    size: 12 * m.scale,
                     color: Theme.of(context).colorScheme.error,
                   ),
                 ],
@@ -146,9 +151,10 @@ class StationTile extends StatelessWidget {
 ///
 /// 0° = 正北（屏幕上方）。没有航向时显示同样字号的 `--`。
 class _DirectionArrow extends StatelessWidget {
-  const _DirectionArrow({required this.courseDegrees});
+  const _DirectionArrow({required this.courseDegrees, required this.size});
 
   final int? courseDegrees;
+  final double size;
 
   @override
   Widget build(BuildContext context) {
@@ -167,7 +173,7 @@ class _DirectionArrow extends StatelessWidget {
       angle: radians,
       child: Icon(
         Icons.navigation,
-        size: 16,
+        size: size,
         color: AppTheme.green, // 绿色点缀
         semanticLabel: Formats.course(courseDegrees),
       ),

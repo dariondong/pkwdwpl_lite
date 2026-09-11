@@ -46,20 +46,24 @@ void main() {
     return r'$' '$body*${NmeaChecksum.format(NmeaChecksum.computeFrom(body))}';
   }
 
-  const List<(double, double)> cases = <(double, double)>[
-    (360, 1.0), // 常见 360dp 手机、默认字号
-    (360, 1.5), // 系统字号 1.5x（用户反馈的场景）
-    (360, 2.0), // 系统字号 2.0x（极端）
-    (320, 1.0), // 小屏
+  // 维度改成「屏宽 + 界面缩放档位」
+  const List<(double, ListScale)> cases = <(double, ListScale)>[
+    (360, ListScale.small),
+    (360, ListScale.normal),
+    (360, ListScale.large),
+    (360, ListScale.huge),
+    (320, ListScale.huge), // 最严苛：小屏 + 特大
   ];
 
-  for (final (double widthDp, double scale) in cases) {
-    testWidgets('stress ${widthDp}dp x$scale', (WidgetTester tester) async {
+  for (final (double widthDp, ListScale scale) in cases) {
+    testWidgets('stress ${widthDp}dp ${scale.name}', (WidgetTester tester) async {
       tester.view.physicalSize = Size(widthDp * 3, 300 * 3);
       tester.view.devicePixelRatio = 3.0;
       addTearDown(tester.view.reset);
 
-      SharedPreferences.setMockInitialValues(<String, Object>{});
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        'list_scale': scale.name,
+      });
       final AppSettings settings = await AppSettings.load();
 
       final List<AprsStation> stations = <AprsStation>[
@@ -83,9 +87,8 @@ void main() {
 
       final GlobalKey boundaryKey = GlobalKey();
       await tester.pumpWidget(
-        // 用 MediaQuery 覆盖系统字号缩放，模拟用户在系统设置里放大字体
         MediaQuery(
-          data: MediaQueryData(size: Size(widthDp, 300), textScaler: TextScaler.linear(scale)),
+          data: MediaQueryData(size: Size(widthDp, 300)),
           child: ChangeNotifierProvider<AppSettings>.value(
             value: settings,
             child: RepaintBoundary(
@@ -124,7 +127,7 @@ void main() {
         final Directory outDir = Directory('build/ui_preview');
         outDir.createSync(recursive: true);
         final File file = File(
-            '${outDir.path}/stress_${widthDp.toInt()}dp_x${scale.toStringAsFixed(1)}.png');
+            '${outDir.path}/stress_${widthDp.toInt()}dp_${scale.name}.png');
         file.writeAsBytesSync(data!.buffer.asUint8List());
         // ignore: avoid_print
         print('已生成: ${file.absolute.path}');

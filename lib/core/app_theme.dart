@@ -8,98 +8,130 @@ import 'package:flutter/material.dart';
 /// * **精简**：不用底部导航，页面入口收进右上角「三个点」菜单；
 /// * **字体统一**：列表里每个字段（呼号/方向/距离/时间）用**同一个字号**，
 ///   呼号不加粗、不放大（App 是记录日志用的，不需要突出呼号）。
+/// 列表界面的缩放档位（用户可在右上角菜单里切换）。
+///
+/// 为什么要有这个：列表是**固定列布局**，对字号很敏感。
+/// 与其替用户猜一个合适的字号，不如直接给他一个开关。
+///
+/// 注意：列表**不跟随系统字号**，只用这里的档位 ——
+/// 这样列宽 / 行高永远和字号同步缩放，任何一档都不会把字段挤没。
+/// （其它页面照常跟随系统字号。）
+enum ListScale {
+  small(0.85, 'settings.list_scale_small'),
+  normal(1.0, 'settings.list_scale_normal'),
+  large(1.15, 'settings.list_scale_large'),
+  huge(1.3, 'settings.list_scale_huge');
+
+  const ListScale(this.factor, this.i18nKey);
+
+  /// 相对于基准尺寸（字号 12 / 行高 34）的缩放倍数。
+  final double factor;
+
+  /// 多语言 key。
+  final String i18nKey;
+
+  /// 菜单里点一下切到下一档（循环）。
+  ListScale get next => ListScale.values[(index + 1) % ListScale.values.length];
+
+  static ListScale fromName(String? name) => ListScale.values.firstWhere(
+        (ListScale value) => value.name == name,
+        orElse: () => ListScale.normal,
+      );
+}
+
+/// 列表行的一套尺寸（字号 / 图标 / 行高 / 各列宽度）。
+///
+/// 全部由 [scale] 统一推导 —— 改档位时字号与列宽一起变，
+/// 不会出现「字大了但列宽没变，右侧字段被挤掉」的情况。
+class ListMetrics {
+  const ListMetrics(this.scale);
+
+  final double scale;
+
+  double get fontSize => AppTheme.baseListFontSize * scale;
+  double get iconSize => 18 * scale;
+  double get rowHeight => 34 * scale;
+  /// 方向箭头列。取 16 是为了刚好装下 15px 的箭头图标 ——
+  /// 若列宽比图标小，图标会“溢出”绘制，和旁边的图标看着像粘在一起。
+  double get colDir => 16 * scale;
+  double get colDistance => 58 * scale;
+  double get colTime => 46 * scale;
+
+  // 上面这组数字是**算出来**的，不是猜的（脚本核过 12 种「屏宽 × 档位」组合）：
+  //   呼号用 Expanded 吃掉剩余空间，其余列宽固定 →
+  //   即使 320dp 小屏 + 特大档（最严苛），呼号也还有 8.9 个字符位，
+  //   足够放下 `BI4PGN-11` 这类 8~9 位呼号。
+  //   时间列按 `HH:mm`（5 字符）配：全程不再溢出一像素。
+
+  /// 列与列之间的间隔（图标与箭头之间用更小的 [tightGap]，
+  /// 否则中间会空出一大截 —— 用户反馈过这个）。
+  ///
+  /// 实测（360dp / 标准档）：呼号→图标 6.0px、**图标→箭头 5.5px**、
+  /// 箭头→距离 3.6px —— 用 `flutter test test/tmp_gap_check_test.dart`
+  /// 这类小脚本量出来的，不靠肉眼估。
+  double get gap => 6 * scale;
+  double get tightGap => 5 * scale;
+}
+
 class AppTheme {
   const AppTheme._();
 
   /// 品牌绿。
   static const Color green = Color(0xFF2E7D32);
 
-  /// 列表字段统一字号 —— 所有列都用它，谁也不比谁大。
+  /// 列表字段的**基准**字号（实际显示 = 该值 × 用户选的缩放档位）。
   ///
   /// 从 14 降到 12：14 时再加上系统字号放大，右侧的「距离 / 时间」会被挤掉
   /// （用户反馈「一行都看不见了，后面的字体都挤没了」）。
-  static const double listFontSize = 12;
-
-  /// 列表行的最大系统字号缩放。
-  ///
-  /// 固定列布局对字号很敏感：用户在系统设置里把字体调到 1.5x~2x 时，
-  /// 任何列宽都会被撑爆。这里封顶到 1.15 —— 既照顾「想看清一点」的需求，
-  /// 又保证「一个信标一行」永远不碎。
-  /// 想完全跟随系统字号，把它改成 `null` 即可。
-  // ignore: unnecessary_nullable_for_final_variable_declarations
-  static const double? maxListTextScale = 1.15;
-
-  /// 列表行的固定行高（配合字号缩小一起调小，一屏能看更多条）。
-  static const double listRowHeight = 34;
-
-  /// 列表行里的图标边长。
-  static const double listIconSize = 20;
+  static const double baseListFontSize = 12;
 
   /// 列表里统一的等宽字体，保证各列对齐（固定布局）。
   static const String monoFont = 'monospace';
-
-  /// 各列的固定宽度（保证「固定位置显示」）。
-  ///
-  /// 宽度按**最坏情况**留足：等宽字体下 1 字符 ≈ 0.6em，
-  /// 12px 字号 + 1.15 倍缩放时约 8.3px/字符，于是：
-  ///   * 方向 `↑` 或 `--` —— 2 字符 ≈ 17px
-  ///   * 距离 `1234.5 km` —— 9 字符 ≈ 75px → 取 72（配合省略号）
-  ///   * 时间 `23:59:59`  —— 8 字符 ≈ 66px
-  ///
-  /// 踩过两次坑，都是**渲染出预览图才发现的**：
-  ///   1. 时间写 62px、方向写 24px → 竖向折行，破坏「一行一个信标」；
-  ///   2. 字号 14 时整体偏宽，小屏 / 大字号下右侧字段被挤掉。
-  static const double colDir = 20; // 方向箭头（只显示箭头，不显示度数）
-  static const double colDistance = 72; // 距离
-  static const double colTime = 66; // 接收时间
-  static const double rowGap = 6;
-
-  /// 列表行的统一文字样式（**所有列共用**，只有颜色可以不同）。
-  ///
-  /// 同时强制「永远单行」：不允许换行、超长用省略号。
-  static TextStyle listText(BuildContext context, {Color? color}) => TextStyle(
-        fontFamily: monoFont,
-        fontSize: listFontSize,
-        fontWeight: FontWeight.w400,
-        color: color ?? Theme.of(context).colorScheme.onSurface,
-      );
 
   /// 列表里任何文本都必须带上的「不换行」参数。
   static const int listMaxLines = 1;
   static const bool listSoftWrap = false;
 
+  /// 取某个缩放档位下的一整套尺寸。
+  static ListMetrics metricsFor(ListScale scale) => ListMetrics(scale.factor);
+
+  /// 列表行的统一文字样式（**所有列共用**，只有颜色可以不同）。
+  ///
+  /// 字号写的是基准值，实际大小由行外层包着的
+  /// `MediaQuery(textScaler: TextScaler.linear(scale))` 统一缩放 ——
+  /// 这样字号与列宽一定同步，不会出现「字大了列宽没变」。
+  static TextStyle listText(BuildContext context, {Color? color}) => TextStyle(
+        fontFamily: monoFont,
+        fontSize: baseListFontSize,
+        fontWeight: FontWeight.w400,
+        color: color ?? Theme.of(context).colorScheme.onSurface,
+      );
+
   /// 次要信息（时间）的柔和色：只是颜色变浅，字号仍是统一字号。
   static Color subtleColor(BuildContext context) =>
       Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.55);
 
-  /// 把列表行的字号缩放**封顶**（见 [maxListTextScale]）。
+  /// 让列表行**只按用户选的档位缩放**（不叠加系统字号）。
   ///
-  /// 只作用于列表，不影响其它页面 —— 用户仍可在系统里把字体调大，
-  /// 只是列表为了保住「一行一个信标」而不跟随到那么大。
-  static Widget clampTextScale({required Widget child}) {
-    // 注意：const 值 + 可空局部变量会让 analyzer 报
-    // unnecessary_nullable_for_final_variable_declarations，
-    // 所以这里用一个可变的 switch 常量来判断，保留「改成 null 即完全跟随系统」的能力。
-    const double? configured = maxListTextScale;
-    switch (configured) {
-      case null:
-        return child;
-      default:
-        final double max = configured;
-        return Builder(
-          builder: (BuildContext context) {
-            final MediaQueryData data = MediaQuery.of(context);
-            final double scale =
-                data.textScaler.scale(listFontSize) / listFontSize;
-            if (scale <= max) return child;
-            return MediaQuery(
-              data: data.copyWith(textScaler: TextScaler.linear(max)),
-              child: child,
-            );
-          },
-        );
-    }
-  }
+  /// 固定列布局最怕「字号来自系统、列宽写死在代码里」这种错配 ——
+  /// 系统字号一旦调大，右侧字段必被挤掉。
+  /// 所以列表干脆完全由 App 内的档位决定；其它页面仍然跟随系统字号。
+  static Widget scaledForList({
+    required ListScale scale,
+    required Widget child,
+  }) =>
+      Builder(
+        builder: (BuildContext context) {
+          // 必须基于**环境里的** MediaQueryData 做 copyWith：
+          // 直接 new 一个 MediaQueryData 会把屏幕尺寸/内边距等全丢掉，
+          // 布局会直接塔掉。copyWith(textScaler:) 同时会把系统字号替换掉。
+          final MediaQueryData data = MediaQuery.of(context);
+          return MediaQuery(
+            data: data.copyWith(textScaler: TextScaler.linear(scale.factor)),
+            child: child,
+          );
+        },
+      );
 
   static ThemeData light() => _build(Brightness.light);
 

@@ -101,6 +101,10 @@ class _StationListPageState extends State<StationListPage> {
                   _openMap('');
                 case _MenuAction.unit:
                   context.read<AppSettings>().toggleDistanceUnit();
+                case _MenuAction.scale:
+                  context.read<AppSettings>().cycleListScale();
+                case _MenuAction.seconds:
+                  context.read<AppSettings>().toggleShowSeconds();
                 case _MenuAction.language:
                   _toggleLanguage();
                 case _MenuAction.clear:
@@ -121,6 +125,22 @@ class _StationListPageState extends State<StationListPage> {
                 Icons.straighten,
                 '${context.tr('settings.distance_unit')}'
                     '：${context.read<AppSettings>().distanceUnit == DistanceUnit.metric ? 'KM' : 'MI'}',
+              ),
+              // 界面缩放：点一下切到下一档（小 → 标准 → 大 → 特大）
+              _menuItem(
+                context,
+                _MenuAction.scale,
+                Icons.zoom_in,
+                '${context.tr('settings.list_scale')}：'
+                    '${context.tr(context.read<AppSettings>().listScale.i18nKey)}',
+              ),
+              // 时间是否显示到秒（不要秒可给呼号腾出宽度）
+              _menuItem(
+                context,
+                _MenuAction.seconds,
+                Icons.timer_outlined,
+                '${context.tr('settings.show_seconds')}：'
+                    '${context.read<AppSettings>().showSeconds ? context.tr('common.enabled') : context.tr('common.disabled')}',
               ),
               // 语言：直接显示当前语言，点一下就切
               _menuItem(
@@ -203,7 +223,7 @@ class _StationListPageState extends State<StationListPage> {
   }
 }
 
-enum _MenuAction { connect, map, unit, language, clear, about }
+enum _MenuAction { connect, map, unit, scale, seconds, language, clear, about }
 
 /// 列表上方**仅一行**的轻量状态条：连接状态点 + 台站数 + 最后更新时间
 /// （有校验失败的语句才追加一项）。白底深色字，绿色只做圆点。
