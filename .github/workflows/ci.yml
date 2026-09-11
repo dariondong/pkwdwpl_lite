@@ -109,8 +109,16 @@ jobs:
         if: failure()
         working-directory: android
         run: |
+          set +e
           echo "===== ./gradlew :app:help --stacktrace （仅配置阶段）====="
-          ./gradlew :app:help --stacktrace --no-daemon --console=plain 2>&1 | tail -160 || true
+          ./gradlew :app:help --stacktrace --no-daemon --console=plain > /tmp/gradle-config.log 2>&1
+          echo "--- 输出总行数: $(wc -l < /tmp/gradle-config.log) ---"
+          echo "===== 堆栈顶部（真正的抛出点，Java 堆栈首帧即最深调用）====="
+          head -120 /tmp/gradle-config.log
+          echo "===== Caused by 链 ====="
+          grep -n "Caused by" /tmp/gradle-config.log || true
+          echo "===== com.android 相关帧 ====="
+          grep -n "com\.android\." /tmp/gradle-config.log | head -25 || true
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
