@@ -4,20 +4,26 @@ import 'package:flutter/material.dart';
 import '../core/l10n.dart';
 
 /// AppBar 上的「中/EN」语言切换按钮（需求：所有页面顶部可切换）。
+///
+/// 注意颜色取自 AppBar 主题的 foregroundColor（青底时是白色），
+/// 否则在绿色 AppBar 上会出现「深色字 + 绿底」看不清的情况。
 class LanguageButton extends StatelessWidget {
   const LanguageButton({super.key});
 
   @override
   Widget build(BuildContext context) {
     final bool isZh = L10n.isChinese(context);
+    final Color foreground = Theme.of(context).appBarTheme.foregroundColor ??
+        Theme.of(context).colorScheme.onSurface;
     return TextButton(
       onPressed: () => L10n.toggleLanguage(context),
       style: TextButton.styleFrom(
-        foregroundColor: Theme.of(context).colorScheme.onSurface,
-        minimumSize: const Size(56, 36),
-        padding: const EdgeInsets.symmetric(horizontal: 8),
+        foregroundColor: foreground,
+        minimumSize: const Size(52, 36),
+        padding: const EdgeInsets.symmetric(horizontal: 6),
       ),
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: <Widget>[
           const Icon(Icons.language, size: 18),
           const SizedBox(width: 4),

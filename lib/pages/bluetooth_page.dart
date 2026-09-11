@@ -15,10 +15,7 @@ import '../widgets/common.dart';
 /// * 顶部实时显示连接状态；
 /// * 提供「演示模式」与「严格校验」开关，以及本机参考坐标（用于算距离）。
 class BluetoothPage extends StatelessWidget {
-  const BluetoothPage({super.key, required this.onOpenStations});
-
-  /// 连接成功后引导去看台站列表。
-  final VoidCallback onOpenStations;
+  const BluetoothPage({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -35,7 +32,7 @@ class BluetoothPage extends StatelessWidget {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
           children: <Widget>[
-            _StatusCard(ingest: ingest, onOpenStations: onOpenStations),
+            _StatusCard(ingest: ingest),
             if (ingest.lastError != null) ...<Widget>[
               const SizedBox(height: 12),
               _Card(
@@ -67,10 +64,9 @@ class BluetoothPage extends StatelessWidget {
 // -----------------------------------------------------------------------------
 
 class _StatusCard extends StatelessWidget {
-  const _StatusCard({required this.ingest, required this.onOpenStations});
+  const _StatusCard({required this.ingest});
 
   final AprsIngest ingest;
-  final VoidCallback onOpenStations;
 
   @override
   Widget build(BuildContext context) {
@@ -153,9 +149,10 @@ class _StatusCard extends StatelessWidget {
                 icon: const Icon(Icons.refresh),
                 label: Text(context.tr('connect.refresh_devices')),
               ),
+            // 连接成功后返回列表看数据（连接页是从列表 push 进来的）
             if (ingest.isConnected)
               TextButton.icon(
-                onPressed: onOpenStations,
+                onPressed: () => Navigator.of(context).maybePop(),
                 icon: const Icon(Icons.list_alt),
                 label: Text(context.tr('connect.goto_stations')),
               ),

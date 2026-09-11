@@ -1,19 +1,28 @@
-import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../core/app_settings.dart';
+import '../core/app_theme.dart';
 import '../core/formats.dart';
 import '../models/aprs_icon.dart';
 import '../models/aprs_station.dart';
 
-/// 台站列表项。
+/// 台站列表项 —— **一个信标只用一行**。
 ///
-/// 列表格式按需求定制：
-/// **接收序号 · 图标 · 呼号 · 方向 · 距离(单位可切换) · 接收时间**
+/// 固定列布局（各列位置固定，字段顺序与需求一致）：
 ///
-/// * 单击 → 台站详情页；
-/// * **双击 → 离线地图（并把该台站居中）**。
+/// ```text
+///  #序号    呼号 图标   方向   距离       时间
+///  #12    BG1UBU-9 🚗     ↑    52.0 km   10:23:53
+/// ```
+///
+/// 设计约束（按需求）：
+/// * 所有字段**字号完全一致**（[AppTheme.listFontSize]），呼号不加粗不放大；
+/// * 方向**只画箭头、不显示度数**；
+/// * 设备图标放在**呼号右侧**；
+/// * **绝不换行**：所有列都带 [AppTheme.listMaxLines] / [AppTheme.listSoftWrap]，
+///   超长就省略号，保证一行一个信标；
+/// * 单击 → 详情页；双击 → 离线地图并居中。
 class StationTile extends StatelessWidget {
   const StationTile({
     super.key,
@@ -41,155 +50,138 @@ class StationTile extends StatelessWidget {
       referenceLongitude: settings.referenceLongitude,
     );
 
+    final TextStyle mainStyle = AppTheme.listText(context);
+    final TextStyle subtleStyle = AppTheme.listText(
+      context,
+      color: AppTheme.subtleColor(context),
+    );
+
     return InkWell(
       onTap: onTap,
       onDoubleTap: onDoubleTap,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-        child: Row(
-          children: <Widget>[
-            // ① 接收序号
-            SizedBox(
-              width: 34,
-              child: Text(
-                '#${station.receiveSeq}',
-                textAlign: TextAlign.center,
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                  fontFamily: 'monospace',
+      child: SizedBox(
+        height: 38, // 单行固定行高
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Row(
+            children: <Widget>[
+              // ① 接收序号
+              SizedBox(
+                width: AppTheme.colSeq,
+                child: Text(
+                  '#${station.receiveSeq}',
+                  style: subtleStyle,
+                  textAlign: TextAlign.right,
+                  maxLines: AppTheme.listMaxLines,
+                  softWrap: AppTheme.listSoftWrap,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-            ),
-            const SizedBox(width: 4),
+              const SizedBox(width: AppTheme.rowGap),
 
-            // ② APRS 图标（官方图标包优先，缺失时回退 Material 图标）
-            CircleAvatar(
-              radius: 20,
-              backgroundColor: theme.colorScheme.primaryContainer,
-              child: AprsSymbolIcon(
-                icon: station.iconRaw,
-                size: 26,
-                semanticLabel: station.iconLabel,
-              ),
-            ),
-            const SizedBox(width: 12),
-
-            // ③ 呼号 + ④ 距离 + ⑥ 接收时间
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Row(
-                    children: <Widget>[
-                      Flexible(
-                        child: Text(
-                          station.callsign,
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w700,
-                            fontFamily: 'monospace',
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
+              // ② 呼号 + 设备图标（图标在呼号右侧）
+              Expanded(
+                child: Row(
+                  children: <Widget>[
+                    Flexible(
+                      child: Text(
+                        station.callsign,
+                        style: mainStyle, // 不加粗、不放大，与其它列同一个字号
+                        maxLines: AppTheme.listMaxLines,
+                        softWrap: AppTheme.listSoftWrap,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(width: 6),
-                      if (station.statusValid == false)
-                        _MiniTag(
-                          text: context.tr('stations.tag_invalid'),
-                          color: theme.colorScheme.outline,
-                        ),
-                      if (station.hasWarnings)
-                        _MiniTag(
-                          text: context.tr('stations.tag_flagged'),
-                          color: theme.colorScheme.error,
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    <String>[
-                      '${distance.text ?? '--'}'
-                          '${distance.source == DistanceSource.estimated ? ' *' : ''}',
-                      Formats.localTimeOnly(station.receivedAt),
-                    ].join('  ·  '),
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                      fontFamily: 'monospace',
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 5),
+                    AprsSymbolIcon(
+                      icon: station.iconRaw,
+                      size: AppTheme.listIconSize,
+                      semanticLabel: station.iconLabel,
+                    ),
+                  ],
+                ),
               ),
-            ),
+              const SizedBox(width: AppTheme.rowGap),
 
-            // ⑤ 方向（航向箭头 + 度数）
-            _DirectionBadge(
-              courseDegrees: station.courseDegrees,
-              color: theme.colorScheme.primary,
-            ),
-            const Icon(Icons.chevron_right, size: 18),
-          ],
+              // ③ 方向：只有箭头，不显示度数
+              SizedBox(
+                width: AppTheme.colDir,
+                child: _DirectionArrow(courseDegrees: station.courseDegrees),
+              ),
+              const SizedBox(width: AppTheme.rowGap),
+
+              // ④ 距离
+              SizedBox(
+                width: AppTheme.colDistance,
+                child: Text(
+                  distance.text ?? '--',
+                  style: mainStyle,
+                  textAlign: TextAlign.right,
+                  maxLines: AppTheme.listMaxLines,
+                  softWrap: AppTheme.listSoftWrap,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: AppTheme.rowGap),
+
+              // ⑤ 接收时间
+              SizedBox(
+                width: AppTheme.colTime,
+                child: Text(
+                  Formats.localTimeOnly(station.receivedAt),
+                  style: subtleStyle,
+                  textAlign: TextAlign.right,
+                  maxLines: AppTheme.listMaxLines,
+                  softWrap: AppTheme.listSoftWrap,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+
+              // 数据有问题的行：一个很轻的提示图标（不占额外行）
+              if (station.hasWarnings) ...<Widget>[
+                const SizedBox(width: 4),
+                Icon(
+                  Icons.error_outline,
+                  size: 13,
+                  color: theme.colorScheme.error,
+                ),
+              ],
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-/// 方向：把箭头按航向旋转（无航向时显示 `--`）。
-class _DirectionBadge extends StatelessWidget {
-  const _DirectionBadge({required this.courseDegrees, required this.color});
+/// 方向指示：按航向旋转的箭头（**不显示度数**）。
+///
+/// 0° = 正北（屏幕上方）。没有航向时显示同样字号的 `--`。
+class _DirectionArrow extends StatelessWidget {
+  const _DirectionArrow({required this.courseDegrees});
 
   final int? courseDegrees;
-  final Color color;
 
   @override
   Widget build(BuildContext context) {
     final double? radians = Formats.courseRadians(courseDegrees);
-    return SizedBox(
-      width: 46,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          if (radians == null)
-            Text(
-              '--',
-              style: Theme.of(context).textTheme.bodySmall,
-            )
-          else
-            Transform.rotate(
-              angle: radians, // 0° = 正北（屏幕上方）
-              child: Icon(Icons.navigation, size: 20, color: color),
-            ),
-          Text(
-            courseDegrees == null ? '' : '$courseDegrees°',
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  fontFamily: 'monospace',
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MiniTag extends StatelessWidget {
-  const _MiniTag({required this.text, required this.color});
-
-  final String text;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(right: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: color.withValues(alpha: 0.5)),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(fontSize: 10, color: color, fontWeight: FontWeight.w700),
+    if (radians == null) {
+      return Text(
+        '--',
+        textAlign: TextAlign.center,
+        maxLines: AppTheme.listMaxLines,
+        softWrap: AppTheme.listSoftWrap,
+        overflow: TextOverflow.ellipsis,
+        style: AppTheme.listText(context, color: AppTheme.subtleColor(context)),
+      );
+    }
+    return Transform.rotate(
+      angle: radians,
+      child: Icon(
+        Icons.navigation,
+        size: 17,
+        color: AppTheme.green, // 绿色点缀
+        semanticLabel: Formats.course(courseDegrees),
       ),
     );
   }

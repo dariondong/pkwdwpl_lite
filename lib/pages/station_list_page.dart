@@ -5,27 +5,27 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../core/app_settings.dart';
+import '../core/app_theme.dart';
 import '../core/formats.dart';
 import '../data/aprs_ingest.dart';
 import '../data/station_store.dart';
 import '../models/aprs_station.dart';
-import '../models/geo_math.dart';
+import '../models/geo_math.dart' show DistanceUnit;
 import '../widgets/common.dart';
 import '../widgets/station_tile.dart';
+import 'about_page.dart';
+import 'bluetooth_page.dart';
 import 'offline_map_page.dart';
 import 'station_detail_page.dart';
 
-/// 页面 2：APRS 站台列表页（主页面）。
+/// 主页面：APRS 站台列表（**一行一个信标**）。
 ///
-/// * 数据来自 [StationStore]（呼号为 Key 的 Map，新数据覆盖并置顶）；
-/// * 列表格式：**序号 · 图标 · 呼号 · 方向 · 距离 · 接收时间**；
-/// * 距离单位 KM/MI 一键切换；
-/// * 单击 → 详情页；**双击 → 离线地图并居中**。
+/// 界面刻意做得极简（按需求）：
+/// * 没有底部导航，所有入口收进右上角**「三个点」菜单**；
+/// * 列表上方只有**一行**很轻的状态条（台站数 + 最后更新时间 + 连接状态点）；
+/// * 列表项：`#序号 · 呼号 · 图标 · 方向箭头 · 距离 · 时间`，全部同一字号。
 class StationListPage extends StatefulWidget {
-  const StationListPage({super.key, required this.onOpenConnect});
-
-  /// 空列表时引导用户去连接页。
-  final VoidCallback onOpenConnect;
+  const StationListPage({super.key});
 
   @override
   State<StationListPage> createState() => _StationListPageState();
@@ -33,7 +33,6 @@ class StationListPage extends StatefulWidget {
 
 class _StationListPageState extends State<StationListPage> {
   Timer? _ticker;
-  StationFilter _filter = StationFilter.all;
 
   @override
   void initState() {
@@ -50,125 +49,17 @@ class _StationListPageState extends State<StationListPage> {
     super.dispose();
   }
 
-  void _openMap(String callsign) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => OfflineMapPage(focusCallsign: callsign),
-      ),
-    );
+  // ---------------------------------------------------------------------------
+  // 页面跳转
+  // ---------------------------------------------------------------------------
+
+  void _push(Widget page) {
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => page));
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final StationStore store = context.watch<StationStore>();
-    final AprsIngest ingest = context.watch<AprsIngest>();
-    final AppSettings settings = context.watch<AppSettings>();
-    final List<AprsStation> stations = store.filteredStations(_filter);
+  void _openMap(String callsign) => _push(OfflineMapPage(focusCallsign: callsign));
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(context.tr('stations.title')),
-        actions: <Widget>[
-          // 距离单位切换（KM / MI）
-          TextButton(
-            onPressed: settings.toggleDistanceUnit,
-            style: TextButton.styleFrom(
-              foregroundColor: Theme.of(context).colorScheme.onSurface,
-              minimumSize: const Size(52, 36),
-            ),
-            child: Text(
-              settings.distanceUnit == DistanceUnit.metric ? 'KM' : 'MI',
-              style: const TextStyle(fontWeight: FontWeight.w700),
-            ),
-          ),
-          const LanguageButton(),
-          IconButton(
-            tooltip: ingest.isConnected
-                ? context.tr('connect.state.connected')
-                : context.tr('connect.title'),
-            icon: Icon(
-              ingest.isConnected ? Icons.bluetooth_connected : Icons.bluetooth,
-            ),
-            onPressed: widget.onOpenConnect,
-          ),
-          // 收进菜单，避免窄屏上 AppBar 放不下（标题被挤没或溢出）。
-          PopupMenuButton<String>(
-            onSelected: (String value) {
-              switch (value) {
-                case 'map':
-                  _openMap('');
-                case 'clear':
-                  _confirmClear(context, store);
-              }
-            },
-            itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-              PopupMenuItem<String>(
-                value: 'map',
-                child: ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.map_outlined),
-                  title: Text(context.tr('map.title')),
-                ),
-              ),
-              if (store.count > 0)
-                PopupMenuItem<String>(
-                  value: 'clear',
-                  child: ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.delete_sweep),
-                    title: Text(context.tr('common.clear_all')),
-                  ),
-                ),
-            ],
-          ),
-        ],
-      ),
-      body: Column(
-        children: <Widget>[
-          _StatsBar(store: store, filter: _filter, onFilter: (StationFilter f) {
-            setState(() => _filter = f);
-          }),
-          const Divider(height: 1),
-          Expanded(
-            child: stations.isEmpty
-                ? EmptyHint(
-                    icon: Icons.satellite_alt,
-                    text: store.isEmpty
-                        ? context.tr('stations.empty')
-                        : context.tr('stations.empty_filtered'),
-                    action: store.isEmpty
-                        ? FilledButton.icon(
-                            onPressed: widget.onOpenConnect,
-                            icon: const Icon(Icons.bluetooth_searching),
-                            label: Text(context.tr('connect.title')),
-                          )
-                        : null,
-                  )
-                : ListView.separated(
-                    itemCount: stations.length,
-                    separatorBuilder: (_, _) => const Divider(height: 1, indent: 62),
-                    itemBuilder: (BuildContext context, int index) {
-                      final AprsStation station = stations[index];
-                      return StationTile(
-                        key: ValueKey<String>(station.callsign),
-                        station: station,
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => StationDetailPage(station: station),
-                          ),
-                        ),
-                        // 双击 → 离线地图，居中该台站
-                        onDoubleTap: () => _openMap(station.callsign),
-                      );
-                    },
-                  ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _confirmClear(BuildContext context, StationStore store) async {
+  Future<void> _confirmClear(StationStore store) async {
     final bool? ok = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) => AlertDialog(
@@ -188,101 +79,181 @@ class _StationListPageState extends State<StationListPage> {
     );
     if (ok ?? false) store.clear();
   }
-}
-
-/// 顶部统计条 + 筛选（现场判断链路是否正常非常有用）。
-class _StatsBar extends StatelessWidget {
-  const _StatsBar({
-    required this.store,
-    required this.filter,
-    required this.onFilter,
-  });
-
-  final StationStore store;
-  final StationFilter filter;
-  final ValueChanged<StationFilter> onFilter;
 
   @override
   Widget build(BuildContext context) {
+    final StationStore store = context.watch<StationStore>();
+    final List<AprsStation> stations = store.stations;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(context.tr('stations.title')),
+        actions: <Widget>[
+          // 「三个点」——所有菜单都藏在这里，保持界面简洁
+          PopupMenuButton<_MenuAction>(
+            icon: const Icon(Icons.more_vert),
+            tooltip: context.tr('common.menu'),
+            onSelected: (_MenuAction action) {
+              switch (action) {
+                case _MenuAction.connect:
+                  _push(const BluetoothPage());
+                case _MenuAction.map:
+                  _openMap('');
+                case _MenuAction.unit:
+                  context.read<AppSettings>().toggleDistanceUnit();
+                case _MenuAction.language:
+                  _toggleLanguage();
+                case _MenuAction.clear:
+                  _confirmClear(store);
+                case _MenuAction.about:
+                  _push(const AboutPage());
+              }
+            },
+            itemBuilder: (BuildContext context) => <PopupMenuEntry<_MenuAction>>[
+              _menuItem(context, _MenuAction.connect, Icons.bluetooth,
+                  context.tr('nav.connect')),
+              _menuItem(context, _MenuAction.map, Icons.map_outlined,
+                  context.tr('map.title')),
+              const PopupMenuDivider(),
+              _menuItem(
+                context,
+                _MenuAction.unit,
+                Icons.straighten,
+                '${context.tr('settings.distance_unit')}'
+                    '：${context.read<AppSettings>().distanceUnit == DistanceUnit.metric ? 'KM' : 'MI'}',
+              ),
+              // 语言：直接显示当前语言，点一下就切
+              _menuItem(
+                context,
+                _MenuAction.language,
+                Icons.language,
+                '${context.tr('common.language')}：'
+                    '${Localizations.localeOf(context).languageCode == 'zh' ? '中' : 'EN'}',
+              ),
+              if (store.count > 0)
+                _menuItem(context, _MenuAction.clear, Icons.delete_sweep,
+                    context.tr('common.clear_all')),
+              const PopupMenuDivider(),
+              _menuItem(context, _MenuAction.about, Icons.info_outline,
+                  context.tr('about.title')),
+            ],
+          ),
+        ],
+      ),
+      body: Column(
+        children: <Widget>[
+          const _StatusBar(),
+          const Divider(height: 1),
+          Expanded(
+            child: stations.isEmpty
+                ? EmptyHint(
+                    icon: Icons.satellite_alt,
+                    text: context.tr('stations.empty'),
+                    action: FilledButton.icon(
+                      onPressed: () => _push(const BluetoothPage()),
+                      icon: const Icon(Icons.bluetooth_searching),
+                      label: Text(context.tr('nav.connect')),
+                    ),
+                  )
+                : ListView.separated(
+                    // 列表本身也是最简：无分割线，靠行距区分
+                    itemCount: stations.length,
+                    separatorBuilder: (_, _) => const Divider(height: 1),
+                    itemBuilder: (BuildContext context, int index) {
+                      final AprsStation station = stations[index];
+                      return StationTile(
+                        key: ValueKey<String>(station.callsign),
+                        station: station,
+                        onTap: () => _push(StationDetailPage(station: station)),
+                        // 双击 → 离线地图，居中该台站
+                        onDoubleTap: () => _openMap(station.callsign),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _toggleLanguage() {
+    final String code = Localizations.localeOf(context).languageCode;
+    context.setLocale(
+      code == 'zh' ? const Locale('en', 'US') : const Locale('zh', 'CN'),
+    );
+  }
+
+  PopupMenuItem<_MenuAction> _menuItem(
+    BuildContext context,
+    _MenuAction action,
+    IconData icon,
+    String label,
+  ) {
+    return PopupMenuItem<_MenuAction>(
+      value: action,
+      height: 44,
+      child: Row(
+        children: <Widget>[
+          Icon(icon, size: 20, color: AppTheme.green),
+          const SizedBox(width: 12),
+          Text(label),
+        ],
+      ),
+    );
+  }
+}
+
+enum _MenuAction { connect, map, unit, language, clear, about }
+
+/// 列表上方**仅一行**的轻量状态条：连接状态点 + 台站数 + 最后更新时间
+/// （有校验失败的语句才追加一项）。白底深色字，绿色只做圆点。
+class _StatusBar extends StatelessWidget {
+  const _StatusBar();
+
+  @override
+  Widget build(BuildContext context) {
+    final StationStore store = context.watch<StationStore>();
+    final AprsIngest ingest = context.watch<AprsIngest>();
     final ThemeData theme = Theme.of(context);
     final AprsStation? latest = store.latest;
 
+    final List<String> parts = <String>[
+      context.tr('stations.count', args: <String>['${store.count}']),
+      if (latest != null) Formats.relativeTime(context, latest.receivedAt),
+      if (store.stats.checksumFailed > 0)
+        '${context.tr('stations.bad_checksum')} ${store.stats.checksumFailed}',
+    ];
+
     return Container(
       width: double.infinity,
-      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      color: theme.colorScheme.surface, // 白底
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      child: Row(
         children: <Widget>[
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: <Widget>[
-              TagChip(
-                context.tr('stations.count', args: <String>['${store.count}']),
-                icon: Icons.radar,
-                color: theme.colorScheme.primary,
-              ),
-              TagChip(
-                '${context.tr('stations.good')} ${store.stats.accepted}',
-                icon: Icons.check_circle,
-                color: Colors.green.shade700,
-              ),
-              if (store.stats.checksumFailed > 0)
-                TagChip(
-                  '${context.tr('stations.bad_checksum')} ${store.stats.checksumFailed}',
-                  icon: Icons.error_outline,
-                  color: theme.colorScheme.error,
-                ),
-              if (store.stats.malformed > 0)
-                TagChip(
-                  '${context.tr('stations.bad_format')} ${store.stats.malformed}',
-                  icon: Icons.warning_amber,
-                  color: Colors.orange.shade800,
-                ),
-              if (store.stats.flagged > 0)
-                TagChip(
-                  '${context.tr('stations.flagged')} ${store.stats.flagged}',
-                  icon: Icons.flag_outlined,
-                  color: Colors.orange.shade900,
-                ),
-              if (latest != null)
-                TagChip(
-                  Formats.relativeTime(context, latest.receivedAt),
-                  icon: Icons.schedule,
-                  color: theme.colorScheme.secondary,
-                ),
-            ],
+          // 连接状态：绿色实心点 / 灰色空心点
+          Tooltip(
+            message: ingest.isConnected
+                ? context.tr('connect.state.connected')
+                : context.tr('connect.state.ready'),
+            child: Icon(
+              ingest.isConnected ? Icons.circle : Icons.circle_outlined,
+              size: 10,
+              color: ingest.isConnected
+                  ? AppTheme.green
+                  : theme.colorScheme.outline,
+            ),
           ),
-          const SizedBox(height: 6),
-          Row(
-            children: <Widget>[
-              for (final StationFilter value in StationFilter.values)
-                Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: ChoiceChip(
-                    label: Text(
-                      context.tr(value.i18nKey),
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                    selected: filter == value,
-                    onSelected: (_) => onFilter(value),
-                    visualDensity: VisualDensity.compact,
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                ),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Text(
-                  context.tr('stations.double_tap_hint'),
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              parts.join('   ·   '),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 12,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
               ),
-            ],
+            ),
           ),
         ],
       ),

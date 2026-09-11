@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import 'core/app_info.dart';
 import 'core/app_settings.dart';
+import 'core/app_theme.dart';
 import 'data/aprs_ingest.dart';
 import 'data/station_store.dart';
 import 'pages/home_shell.dart';
@@ -61,8 +62,8 @@ class PkwdwplLiteApp extends StatelessWidget {
       child: MaterialApp(
         title: AppInfo.appName,
         debugShowCheckedModeBanner: false,
-        theme: _buildTheme(Brightness.light),
-        darkTheme: _buildTheme(Brightness.dark),
+        theme: AppTheme.light(),
+        darkTheme: AppTheme.dark(),
         localizationsDelegates: context.localizationDelegates,
         supportedLocales: context.supportedLocales,
         locale: context.locale,
@@ -72,18 +73,4 @@ class PkwdwplLiteApp extends StatelessWidget {
     );
   }
 
-  ThemeData _buildTheme(Brightness brightness) {
-    final ColorScheme scheme = ColorScheme.fromSeed(
-      seedColor: const Color(0xFF2E7D32),
-      brightness: brightness,
-    );
-    return ThemeData(
-      colorScheme: scheme,
-      useMaterial3: true,
-      visualDensity: VisualDensity.standard,
-      listTileTheme: const ListTileThemeData(
-        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-      ),
-    );
-  }
 }
