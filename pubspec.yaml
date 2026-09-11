@@ -30,7 +30,15 @@ dependencies:
   shared_preferences: ^2.5.5
 
   # 蓝牙运行时权限（Android 12+ 的 BLUETOOTH_SCAN / BLUETOOTH_CONNECT）
-  permission_handler: ^13.0.2
+  #
+  # ⚠️ 版本必须钉在 12.x：13.0.2 会拉入 permission_handler_android 14.1.0，
+  #    后者要求 compileSdk ≥ 37，而 Flutter 3.47 的默认值（也是 AGP 9.1 的
+  #    最高推荐值）只有 36，一编译就报：
+  #      Dependency ':permission_handler_android' requires ... compile against
+  #      version 37 or later of the Android APIs. :app is currently compiled
+  #      against android-36.
+  #    实测 12.0.3 → permission_handler_android 13.0.1（要求 compileSdk 35）✅
+  permission_handler: 12.0.3
 
   # 经典蓝牙 SPP 串口。
   # 说明：这里使用仓库内置副本 (third_party/)，原因见该目录 README_LOCAL.md：

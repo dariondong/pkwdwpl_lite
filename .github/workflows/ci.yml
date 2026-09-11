@@ -42,6 +42,20 @@ jobs:
       - name: Check version consistency
         run: python3 tool/sync_version.py
 
+      # 需求：compileSdk / targetSdk 至少 API 34。
+      # build.gradle.kts 用的是 flutter.compileSdkVersion（跟随 SDK 默认值），
+      # 所以这里直接读 Flutter SDK 的实际取值来守这条线，
+      # 而不是往 Gradle 脚本里塞 check()（实测往那里加东西容易触发 AGP 误判）。
+      - name: Check SDK API level (>= 34)
+        run: |
+          set -euo pipefail
+          ext="$FLUTTER_ROOT/packages/flutter_tools/gradle/src/main/kotlin/FlutterExtension.kt"
+          csdk=$(grep -oP 'val compileSdkVersion: Int = \K[0-9]+' "$ext")
+          tsdk=$(grep -oP 'val targetSdkVersion: Int = \K[0-9]+' "$ext")
+          echo "Flutter compileSdkVersion=$csdk  targetSdkVersion=$tsdk  （需求要求 >= 34）"
+          [ "$csdk" -ge 34 ] || { echo "::error::compileSdk $csdk < 34"; exit 1; }
+          [ "$tsdk" -ge 34 ] || { echo "::error::targetSdk $tsdk < 34"; exit 1; }
+
       - name: flutter analyze
         run: flutter analyze
 
