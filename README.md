@@ -135,7 +135,7 @@ python3 tool/gen_launcher_icon.py --bg green --no-ring # 换成绿底
 ```
 pkwdwpl_lite/
 ├── android/                        # Kotlin DSL，AGP 9.1 / Gradle 9.3.1
-│   ├── app/build.gradle.kts        # ★ 签名（环境变量优先，key.properties 兜底）
+│   ├── app/build.gradle.kts        # ★ 签名（key.properties 优先，环境变量/debug 兜底）
 │   ├── app/src/main/AndroidManifest.xml   # ★ 蓝牙权限 / 后台保活权限
 │   ├── gradle.properties           # 调小 JVM 内存，避免 CI OOM
 │   └── key.properties.example
@@ -173,7 +173,8 @@ pkwdwpl_lite/
 │   └── main.dart
 ├── test/                           # 62 个测试（含真实报文回归）
 ├── third_party/flutter_bluetooth_serial_plus/   # ★ 内置蓝牙插件（已打 CI 兼容补丁）
-├── tool/{make_signing_key.sh, sync_version.py, update_vendored_plugin.py}
+├── tool/{gen_keystore.py, set_github_secrets.py, sync_version.py, update_vendored_plugin.py}
+├── tool/{gen_launcher_icon.py, update_aprs_symbols.py}
 ├── docs/PROTOCOL.md                # ★ 协议 + 真实报文复算 + 字段数/字段11 结论
 ├── docs/BACKGROUND_BRIDGE.md       # ★ 与你的后台保活架构对接方案
 └── .github/workflows/{ci,release}.yml
@@ -287,7 +288,7 @@ Dart API 与上游 100% 一致；想换回 pub.dev 官方包改一行注释即�
 | 文件 | 触发 | 干什么 |
 | --- | --- | --- |
 | `.github/workflows/ci.yml` | push `main`/`dev/**`/`release/**`、PR、手动 | `sync_version.py` → `flutter analyze` → `flutter test` → `flutter build apk --debug` + artifact |
-| `.github/workflows/release.yml` | tag `v*`、手动 | 解码 keystore → analyze/test → `flutter build apk --release` → `apksigner verify` 验签 → artifact + GitHub Release |
+| `.github/workflows/release.yml` | tag `v*`、手动 | 从 Secrets 恢复 keystore → 校验版本一致 → analyze/test → `flutter build apk --release` → `apksigner verify` 验签 → artifact + GitHub Release |
 
 两者都：`ubuntu-latest` + `actions/setup-java@v4`（**Temurin 17**）+
 `subosito/flutter-action@v2`（**锁定 3.47.3**、缓存 SDK）+ 缓存 `~/.gradle/{caches,wrapper}`。
@@ -296,25 +297,81 @@ gradle wrapper 用 `-bin.zip`，JVM 堆降到 4G（模板默认 8G 在 4 核 16G
 > 若 runner 报「AGP 9.x 需要更高 JDK」，把两个 workflow 里的 `java-version: '17'`
 > 改成 `'21'` 即可，`build.gradle.kts` 不用动。
 
-### 一次性：keystore → Base64 → Secrets
+### 签名配置（必须做，否则打 tag 会失败）
+
+项目采用与 **APRSLocus 相同的一套约定**（Secrets 名字、目录、key.properties 格式都一致），
+两边操作习惯通用：
+
+| Secret | 内容 |
+| --- | --- |
+| `ANDROID_KEYSTORE_BASE64` | keystore 文件的 base64（一整行） |
+| `ANDROID_KEYSTORE_PASSWORD` | keystore 密码（store 与 key 用同一个） |
+| `ANDROID_KEY_ALIAS` | 可选，别名，默认 `pkwdwpl` |
+
+#### ① 生成 keystore（二选一）
 
 ```bash
-keytool -genkeypair -v -keystore release.jks -storetype JKS \
-  -keyalg RSA -keysize 2048 -validity 10000 \
-  -alias pkwdwpl -storepass '你的store密码' -keypass '你的key密码' \
-  -dname "CN=BG7LZQ, OU=Ham, O=PKWDWPL Lite, L=Guangzhou, ST=Guangdong, C=CN"
+# 方式 A：不需要 JDK（推荐，已实测可用）
+python3 tool/gen_keystore.py --out android/keystore/release.keystore
+#  -- 输出会直接把密码 / 别名 / base64 全部打印出来，抄下来
 
-bash tool/make_signing_key.sh release.jks     # 打印 base64
-# GitHub → Settings → Secrets and variables → Actions 新建：
-#   SIGNING_KEY / KEY_ALIAS / KEY_PASSWORD / STORE_PASSWORD
+# 方式 B：用 JDK 的 keytool
+keytool -genkeypair -v -keystore android/keystore/release.keystore -storetype PKCS12 \
+  -keyalg RSA -keysize 2048 -validity 10000 -alias pkwdwpl \
+  -storepass '你的密码' -keypass '你的密码' \
+  -dname "CN=BG7LZQ, OU=Amateur Radio, O=PKWDWPL Lite, C=CN"
 ```
+
+只要已有的 keystore 转 base64：
+
+```bash
+python3 tool/gen_keystore.py --base64-only android/keystore/release.keystore
+```
+
+#### ② 写入 Secrets（二选一）
+
+```bash
+# 方式 A：自动写入（需要 token 具备 Secrets: Read and write 权限）
+python3 tool/set_github_secrets.py --repo dariondong/pkwdwpl_lite \
+  --keystore android/keystore/release.keystore --password '<密码>'
+
+# 方式 B：网页手动添加
+# 仓库 → Settings → Secrets and variables → Actions → New repository secret
+```
+
+> 细粒度 PAT（fine-grained）默认**没有** Secrets 写权限，会被拒绝：
+> `Resource not accessible by personal access token`。
+> 此时用方式 B 手动添加，或给 token 勾上 **Secrets: Read and write**。
+
+#### ③ CI 里如何恢复签名
 
 ```yaml
-- name: Restore keystore from Secret
-  run: echo "$SIGNING_KEY" | base64 -d > android/app/release.jks
+- name: Restore keystore from Secrets
+  env:
+    ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+    ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+  run: |
+    mkdir -p android/keystore
+    echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/keystore/release.keystore
+    printf 'storePassword=%s\nkeyPassword=%s\nkeyAlias=%s\nstoreFile=keystore/release.keystore\n' \
+      "$ANDROID_KEYSTORE_PASSWORD" "$ANDROID_KEYSTORE_PASSWORD" "${ANDROID_KEY_ALIAS:-pkwdwpl}" \
+      > android/key.properties
 ```
 
-`android/app/build.gradle.kts` 里 **环境变量优先 → `key.properties` → debug 签名兜底**。
+`build.gradle.kts` 的优先级：**`android/key.properties` → 环境变量 → debug 签名兜底**。
+注意 `key.properties` 里的 `storeFile` 是**相对 `android/`** 的（用 `rootProject.file()` 解析），
+与 APRSLocus 写法一致。
+
+> **为什么 release 工作流在缺 Secret 时直接报错而不是回退 debug 签名？**
+> tag 产出的包会直接发给用户；debug 签名的包装不上后续正式版，宁可不发。
+> （APRSLocus 的做法是静默回退 debug，这里刻意改成硬失败。）
+
+#### ④ 本地打包
+
+```bash
+cp android/key.properties.example android/key.properties   # 填密码
+flutter build apk --release
+```
 
 ### 发版节奏（建议）
 
@@ -329,7 +386,7 @@ bash tool/make_signing_key.sh release.jks     # 打印 base64
 ## 10. `.gitignore` 检查清单
 
 - [x] `android/local.properties`
-- [x] `android/key.properties`、`**/*.jks`、`**/*.keystore`、`*.base64`
+- [x] `android/key.properties`、`android/keystore/`、`**/*.jks`、`**/*.keystore`、`*.base64`
 - [x] `.dart_tool/`、`.flutter-plugins`、`.flutter-plugins-dependencies`、`build/`
 - [x] `third_party/*/build/`
 - [x] `.idea/`、`*.iml`、`.vscode/`

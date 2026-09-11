@@ -5,10 +5,6 @@ on:
   push:
     tags: ['v*']
   workflow_dispatch:
-    inputs:
-      tag:
-        description: '（可选）用于 Release 名称的版本号，例如 v1.0.0'
-        required: false
 
 permissions:
   contents: write
@@ -50,55 +46,74 @@ jobs:
       - name: flutter pub get
         run: flutter pub get
 
+      - name: Check version consistency
+        run: python3 tool/sync_version.py
+
       - name: Run tests before release
         run: |
-          python3 tool/sync_version.py
           flutter analyze
           flutter test
 
-      - name: Restore keystore from Secret
+      # ---------------------------------------------------------------------
+      # 签名：从 Secrets 恢复 keystore 并生成 android/key.properties
+      # （与 APRSLocus 的打包方式保持一致，两边的操作习惯通用）
+      #
+      # 需要的 Secrets：
+      #   ANDROID_KEYSTORE_BASE64    keystore 的 base64（见 tool/gen_keystore.py）
+      #   ANDROID_KEYSTORE_PASSWORD  keystore 密码
+      #   ANDROID_KEY_ALIAS          可选，默认 pkwdwpl
+      #
+      # 这里刻意做成「缺 Secret 直接失败」而不是静默回退 debug 签名：
+      # tag 会直接产出面向用户的正式包，宁可不发，也不要发一个 debug 签名的包
+      # （debug 签名的包用户无法覆盖安装后续正式版）。
+      # ---------------------------------------------------------------------
+      - name: Restore keystore from Secrets
         env:
-          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS || 'pkwdwpl' }}
         run: |
           set -euo pipefail
-          if [ -z "${SIGNING_KEY:-}" ]; then
-            echo "::error::缺少 Secret: SIGNING_KEY（keystore 的 base64，见 README「签名配置」）"
+          if [ -z "${ANDROID_KEYSTORE_BASE64:-}" ]; then
+            echo "::error::缺少 Secret ANDROID_KEYSTORE_BASE64。请先按 README「签名配置」章节配置签名。"
             exit 1
           fi
-          echo "$SIGNING_KEY" | base64 -d > android/app/release.jks
-          ls -l android/app/release.jks
-          echo "keystore restored"
-
-      - name: Show version from pubspec.yaml
-        run: |
-          # 版本号以 pubspec.yaml 为唯一来源（version: X.Y.Z+N）
-          grep -m1 '^version:' pubspec.yaml
+          if [ -z "${ANDROID_KEYSTORE_PASSWORD:-}" ]; then
+            echo "::error::缺少 Secret ANDROID_KEYSTORE_PASSWORD。"
+            exit 1
+          fi
+          mkdir -p android/keystore
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/keystore/release.keystore
+          printf 'storePassword=%s\nkeyPassword=%s\nkeyAlias=%s\nstoreFile=keystore/release.keystore\n' \
+            "$ANDROID_KEYSTORE_PASSWORD" "$ANDROID_KEYSTORE_PASSWORD" "$ANDROID_KEY_ALIAS" \
+            > android/key.properties
+          echo "keystore 已恢复："
+          ls -l android/keystore/release.keystore
 
       - name: Build signed release APK
-        env:
-          # 这三个直接透传给 android/app/build.gradle.kts
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
-          # 让构建脚本知道「有签名」（也用于校验）
-          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
         run: flutter build apk --release
 
-      - name: Verify APK signature
+      - name: Verify APK is signed (not debug)
         run: |
           set -euo pipefail
           BT="$(ls -d "${ANDROID_HOME}"/build-tools/* | sort -V | tail -1)"
           "$BT/apksigner" verify --print-certs build/app/outputs/flutter-apk/app-release.apk
 
+      - name: Rename APK
+        run: |
+          ver="$(python3 -c "import re;print(re.search(r'version:\s*([0-9.]+)', open('pubspec.yaml').read()).group(1))")"
+          mv build/app/outputs/flutter-apk/app-release.apk \
+             "build/app/outputs/flutter-apk/PKWDWPL_Lite_${ver}.apk"
+
       - name: Clean up keystore & signing config
         if: always()
-        run: rm -f android/app/release.jks android/key.properties
+        run: rm -f android/keystore/release.keystore android/key.properties
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: pkwdwpl-lite-release-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: build/app/outputs/flutter-apk/PKWDWPL_Lite_*.apk
           if-no-files-found: error
           retention-days: 30
 
@@ -111,7 +126,7 @@ jobs:
           draft: false
           generate_release_notes: true
           files: |
-            build/app/outputs/flutter-apk/app-release.apk
+            build/app/outputs/flutter-apk/PKWDWPL_Lite_*.apk
           body: |
             ## PKWDWPL Lite ${{ github.ref_name }}
 
@@ -122,4 +137,4 @@ jobs:
             - 数据协议：Kenwood `$PKWDWPL` NMEA 0183
             - 支持 Android（API 23+）
 
-            安装包：`app-release.apk`（已用 release key 签名）
+            安装包已用 release key 签名（CI 中已通过 apksigner 验证）。

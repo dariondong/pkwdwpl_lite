@@ -1,25 +1,23 @@
 # 本地发布签名配置示例。
 #
 # 用法：
-#   1. cp android/key.properties.example android/key.properties
-#   2. 按下面格式填入你自己的信息（key.properties 已被 .gitignore 忽略，不会进仓库）
+#   1. 生成 keystore（无需 JDK）：
+#        python3 tool/gen_keystore.py --out android/keystore/release.keystore
+#      或者用 keytool：
+#        keytool -genkeypair -v -keystore android/keystore/release.keystore -storetype PKCS12 \
+#          -keyalg RSA -keysize 2048 -validity 10000 -alias pkwdwpl \
+#          -storepass '你的密码' -keypass '你的密码' \
+#          -dname "CN=BG7LZQ, OU=Amateur Radio, O=PKWDWPL Lite, C=CN"
+#   2. 复制本文件为 android/key.properties 并填入下面的值
 #
-# CI（GitHub Actions）不使用本文件，而是用环境变量：
-#   SIGNING_KEY / KEY_ALIAS / KEY_PASSWORD / STORE_PASSWORD
+# ⚠️ android/key.properties 与 android/keystore/ 都已被 .gitignore 忽略，不会进仓库。
 #
-# 生成 keystore（一次性）：
-#   keytool -genkeypair -v -keystore release.jks -storetype JKS \
-#     -keyalg RSA -keysize 2048 -validity 10000 \
-#     -alias pkwdwpl -storepass '你的store密码' -keypass '你的key密码' \
-#     -dname "CN=BG7LZQ, OU=Ham, O=PKWDWPL Lite, L=Guangzhou, ST=Guangdong, C=CN"
-#
-# 生成 Base64（用于 GitHub Secret SIGNING_KEY）：
-#   base64 -w 0 release.jks > release.jks.base64     # Linux
-#   base64 -i release.jks | pbcopy                   # macOS
-# 或者直接用本仓库的脚本：bash tool/make_signing_key.sh release.jks
-#
+# CI（GitHub Actions）不使用本文件，而是从 Secrets 生成：
+#   ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD（/ ANDROID_KEY_ALIAS 可选）
+# 详见 .github/workflows/release.yml 与 README 的「签名配置」章节。
+
 storePassword=你的store密码
 keyPassword=你的key密码
 keyAlias=pkwdwpl
-# 相对 android/app/ 的路径（也可以写绝对路径）
-storeFile=release.jks
+# 路径相对于 android/ 目录（与 APRSLocus 的写法一致）
+storeFile=keystore/release.keystore
