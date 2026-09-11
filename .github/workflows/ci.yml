@@ -1,0 +1,94 @@
+name: CI Test Build
+
+# 日常开发用：推 main / 提 PR 时跑「静态检查 + 单元测试 + Debug 包编译」，
+# 全绿之后再打 tag（tag 会触发 release.yml 出正式包）。
+on:
+  push:
+    branches: [main, 'dev/**', 'release/**']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # 与本地一致的 stable 版本；要升级时改这里即可（记得同步 test/CI 通过）
+  FLUTTER_VERSION: '3.47.3'
+
+jobs:
+  analyze:
+    name: Analyze & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Flutter (${{ env.FLUTTER_VERSION }})
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: flutter pub get
+        run: flutter pub get
+
+      - name: Check version consistency
+        run: python3 tool/sync_version.py
+
+      - name: flutter analyze
+        run: flutter analyze
+
+      - name: flutter test
+        run: flutter test --reporter expanded
+
+  android-debug:
+    name: Android Debug APK
+    needs: analyze
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Flutter (${{ env.FLUTTER_VERSION }})
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-debug-${{ runner.os }}-${{ hashFiles('android/**/*.gradle*', 'android/gradle/wrapper/gradle-wrapper.properties', 'third_party/**/*.gradle') }}
+          restore-keys: |
+            gradle-debug-${{ runner.os }}-
+            gradle-${{ runner.os }}-
+
+      - name: flutter pub get
+        run: flutter pub get
+
+      - name: flutter build apk --debug
+        run: flutter build apk --debug
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: pkwdwpl-lite-debug-apk
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14

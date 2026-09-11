@@ -1,0 +1,59 @@
+name: pkwdwpl_lite
+description: >-
+  PKWDWPL Lite — 通过经典蓝牙 (Bluetooth SPP) 接收 Kenwood $PKWDWPL NMEA 语句的
+  APRS 台站接收与台账 App。作者/开发者: BG7LZQ；技术接口协议提供者: BH7NOR。
+publish_to: "none" # 私有项目，防止误发布到 pub.dev
+
+version: 1.1.0+2
+environment:
+  sdk: ^3.9.0
+  flutter: ">=3.35.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+
+  # 状态管理
+  provider: ^6.1.5
+
+  # 多语言（中英实时切换，默认中文）
+  easy_localization: ^3.0.8
+
+  # 时间格式化 / 本地化数字
+  intl: ^0.20.2
+
+  # 设置项持久化（严格校验开关、演示模式、本机坐标等）
+  shared_preferences: ^2.5.5
+
+  # 蓝牙运行时权限（Android 12+ 的 BLUETOOTH_SCAN / BLUETOOTH_CONNECT）
+  permission_handler: ^13.0.2
+
+  # 经典蓝牙 SPP 串口。
+  # 说明：这里使用仓库内置副本 (third_party/)，原因见该目录 README_LOCAL.md：
+  # 上游 android/build.gradle 写死了 AGP 8.1.1 的 buildscript classpath，
+  # 与新版 Flutter 模板 (AGP 9.x) 冲突。内置副本已删除该 classpath 并统一 compileSdk/Java 17。
+  # 若你更想用 pub.dev 官方包，把下面两行换成：
+  #   flutter_bluetooth_serial_plus: ^0.5.6
+  flutter_bluetooth_serial_plus:
+    path: third_party/flutter_bluetooth_serial_plus
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/translations/
+    # 离线地图底图目录（可选）。把 offline_map.png 放进 assets/map/ 即生效，
+    # 目录里已有一个 README.txt 占位，因此这一行可以一直保留。
+    - assets/map/
+    # APRS 官方符号图标包（来自 APRSLocus 项目，3571 张 PNG：
+    # 38 个符号表 × 符号码 0x21~0x7E，文件名 = 表/码的十六进制，如 2f6a.png = "/j"）
+    - assets/aprs_syms/

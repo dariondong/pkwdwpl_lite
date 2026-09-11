@@ -1,0 +1,26 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!--
+      本文件由 PKWDWPL Lite 项目维护（vendored 插件），只做两件事：
+        1. 老权限加 maxSdkVersion="30"，避免 Android 12+ 继续索要定位权限；
+        2. 删掉上游那份清单里多余的 <application>/<activity> 元素
+           （上游把一个 FlutterPlugin 写成了 activity，会在合并时注入
+            largeHeap/Theme.AppCompat.NoActionBar，影响宿主 App 的主题）。
+
+      所有「附近的设备」权限由宿主 App 的 AndroidManifest.xml 统一声明。
+    -->
+    <uses-permission
+        android:name="android.permission.BLUETOOTH"
+        android:maxSdkVersion="30" />
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_ADMIN"
+        android:maxSdkVersion="30" />
+    <uses-permission
+        android:name="android.permission.ACCESS_COARSE_LOCATION"
+        android:maxSdkVersion="30" />
+    <uses-permission
+        android:name="android.permission.ACCESS_FINE_LOCATION"
+        android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.REQUEST_DISCOVERABLE" />
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+</manifest>

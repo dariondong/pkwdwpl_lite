@@ -1,0 +1,36 @@
+PKWDWPL Lite — 第三方资源与来源说明
+====================================
+
+1. APRS 官方符号图标包（assets/aprs_syms/，3571 张 24x24 PNG，约 2.4 MB）
+-------------------------------------------------------------------------
+* 来源：**APRSLocus** 项目的 assets/aprs_syms/（本项目作者自己的另一个项目，
+  直接复制过来，命名与目录结构保持一致，方便两边共用代码）。
+* 上游素材：由 APRSLocus 的 tools/download_aprs_icons.py 从
+  https://aprs.tv/img/<hex(符号表)><hex(符号码)>.png 抓取的公开 APRS 符号图。
+* 覆盖：APRS 官方 37 个符号表 × 符号码 0x21('!') ~ 0x7E('~')。
+* 使用方式：文件名 = 两位小写十六进制的「符号表 + 符号码」，例如 2f6a.png = "/j"。
+  代码见 lib/models/aprs_symbol_assets.dart。
+* ⚠️ **许可**：APRSLocus 以 **GPL-3.0** 分发，因此这套图标随本仓库一起也应按
+  **GPL-3.0** 对待。本仓库目前是私有仓库（未对外分发）。
+  如果你将来要闭源 / 商业分发，请先把这套图标换成可自由使用的一套
+  （例如自绘 SVG 或 Material Symbols 的那几十个常用符号）。
+
+2. flutter_bluetooth_serial_plus（third_party/，内置副本）
+-----------------------------------------------------------
+* 上游：https://github.com/angelicadelacruzgonzalez/flutter_bluetooth_serial_plus
+* 版本：0.5.6（MIT License，LICENSE 随源码保留在该目录）。
+* 本仓库只改了它的 android/build.gradle（去掉自带 AGP classpath、对齐 compileSdk/Java 17）
+  与 AndroidManifest（老权限加 maxSdkVersion、删掉多余的 application/activity）。
+  Dart API 与 Java 实现与原版一致。详见该目录 README_LOCAL.md。
+
+3. 其它依赖
+-----------
+* provider (MIT)、easy_localization (MIT)、intl (BSD)、shared_preferences (BSD)、
+  permission_handler (MIT)、cupertino_icons (MIT)、flutter_lints (BSD)。
+  完整清单见 pubspec.lock。
+
+4. 协议与真实报文
+-----------------
+* 数据协议：Kenwood $PKWDWPL（NMEA 0183 风格）；字段整理与真实报文采集：**BH7NOR**（2025-08）。
+* test/real_capture_test.dart 中的 10 条真实报文来自 BH7NOR 的采集，
+  其中 3 条的校验和与其携带值不符，已在 docs/PROTOCOL.md 中逐条定性。

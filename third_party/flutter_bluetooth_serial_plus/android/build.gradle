@@ -1,0 +1,49 @@
+// ---------------------------------------------------------------------------
+// 本文件由 PKWDWPL Lite 项目维护，基于 flutter_bluetooth_serial_plus 0.5.6 修改。
+//
+// 修改点（为了让它在 AGP 9.x / Gradle 9.x / Java 17 的 CI 环境里能编译）：
+//   1. 删除原文件的 `buildscript { classpath 'com.android.tools.build:gradle:8.1.1' }`
+//      老插件自带 AGP classpath 会与宿主工程的 AGP 9.1.0 版本冲突（Gradle 会报
+//      "Android Gradle plugin version ... is too old/conflict" 之类错误）。
+//      这里改为完全使用宿主工程（android/settings.gradle.kts）里声明的 AGP。
+//   2. compileSdk 显式在宿主工程内统一为 36（见 android/app/build.gradle.kts 注释）。
+//   3. 其余 Java 源码 / API 行为与原插件 0.5.6 完全一致。
+//
+// 上游项目: https://github.com/angelicadelacruzgonzalez/flutter_bluetooth_serial_plus
+// (fork 自 flutter_bluetooth_serial, MIT License, LICENSE 文件已随源码保留)
+// ---------------------------------------------------------------------------
+group 'com.angie.flutterbluetoothserialplus'
+version '1.0.0'
+
+rootProject.allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+apply plugin: 'com.android.library'
+
+android {
+    namespace 'com.angie.flutterbluetoothserialplus'
+    compileSdk 36
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    defaultConfig {
+        minSdk 21
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    lint {
+        disable 'InvalidPackage'
+    }
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.7.1'
+    implementation 'androidx.core:core:1.16.0'
+}

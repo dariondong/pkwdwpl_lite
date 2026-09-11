@@ -1,0 +1,125 @@
+name: Build Release APK
+
+# 打 tag 才发版（例如 v1.0.0）。请务必等 CI Test Build 全绿之后再打 tag。
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '（可选）用于 Release 名称的版本号，例如 v1.0.0'
+        required: false
+
+permissions:
+  contents: write
+
+env:
+  FLUTTER_VERSION: '3.47.3'
+
+jobs:
+  release:
+    name: Signed Release APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Flutter (${{ env.FLUTTER_VERSION }})
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-release-${{ runner.os }}-${{ hashFiles('android/**/*.gradle*', 'android/gradle/wrapper/gradle-wrapper.properties', 'third_party/**/*.gradle') }}
+          restore-keys: |
+            gradle-release-${{ runner.os }}-
+            gradle-${{ runner.os }}-
+
+      - name: flutter pub get
+        run: flutter pub get
+
+      - name: Run tests before release
+        run: |
+          python3 tool/sync_version.py
+          flutter analyze
+          flutter test
+
+      - name: Restore keystore from Secret
+        env:
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SIGNING_KEY:-}" ]; then
+            echo "::error::缺少 Secret: SIGNING_KEY（keystore 的 base64，见 README「签名配置」）"
+            exit 1
+          fi
+          echo "$SIGNING_KEY" | base64 -d > android/app/release.jks
+          ls -l android/app/release.jks
+          echo "keystore restored"
+
+      - name: Show version from pubspec.yaml
+        run: |
+          # 版本号以 pubspec.yaml 为唯一来源（version: X.Y.Z+N）
+          grep -m1 '^version:' pubspec.yaml
+
+      - name: Build signed release APK
+        env:
+          # 这三个直接透传给 android/app/build.gradle.kts
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          # 让构建脚本知道「有签名」（也用于校验）
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+        run: flutter build apk --release
+
+      - name: Verify APK signature
+        run: |
+          set -euo pipefail
+          BT="$(ls -d "${ANDROID_HOME}"/build-tools/* | sort -V | tail -1)"
+          "$BT/apksigner" verify --print-certs build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Clean up keystore & signing config
+        if: always()
+        run: rm -f android/app/release.jks android/key.properties
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pkwdwpl-lite-release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: PKWDWPL Lite ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
+          draft: false
+          generate_release_notes: true
+          files: |
+            build/app/outputs/flutter-apk/app-release.apk
+          body: |
+            ## PKWDWPL Lite ${{ github.ref_name }}
+
+            蓝牙串口（Classic Bluetooth SPP）APRS 接收 App。
+
+            - 作者 / 开发者：BG7LZQ
+            - 技术接口协议提供者：BH7NOR
+            - 数据协议：Kenwood `$PKWDWPL` NMEA 0183
+            - 支持 Android（API 23+）
+
+            安装包：`app-release.apk`（已用 release key 签名）
