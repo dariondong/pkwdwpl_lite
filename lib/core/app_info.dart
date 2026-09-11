@@ -8,10 +8,10 @@ class AppInfo {
   static const String appName = 'PKWDWPL Lite';
 
   /// 与 pubspec.yaml 的 version 前半段保持一致。
-  static const String appVersion = '1.1.0';
+  static const String appVersion = '1.1.1';
 
   /// 与 pubspec.yaml 的 version 后半段（+N）保持一致。
-  static const String buildNumber = '2';
+  static const String buildNumber = '3';
 
   /// 作者 / 开发者。
   static const String author = 'BG7LZQ';

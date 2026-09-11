@@ -7,21 +7,22 @@ import '../core/formats.dart';
 import '../models/aprs_icon.dart';
 import '../models/aprs_station.dart';
 
-/// 台站列表项 —— **一个信标只用一行**。
+/// 台站列表项 —— **一个信标只用一行**（接收序号已按需求去掉）。
 ///
-/// 固定列布局（各列位置固定，字段顺序与需求一致）：
+/// 固定列布局（各列位置固定）：
 ///
 /// ```text
-///  #序号    呼号 图标   方向   距离       时间
-///  #12    BG1UBU-9 🚗     ↑    52.0 km   10:23:53
+///  呼号 图标   方向   距离       时间
+///  BG1UBU-9 🚗    ↑    52.0 km   10:23:53
 /// ```
 ///
-/// 设计约束（按需求）：
-/// * 所有字段**字号完全一致**（[AppTheme.listFontSize]），呼号不加粗不放大；
+/// 设计约束：
+/// * 所有字段**字号完全一致**（[AppTheme.listFontSize]，12）且不跟随系统字号
+///   无限放大（[AppTheme.maxListTextScale] 封顶到 1.15）——
+///   否则右侧的距离/时间会被挤没；
 /// * 方向**只画箭头、不显示度数**；
 /// * 设备图标放在**呼号右侧**；
-/// * **绝不换行**：所有列都带 [AppTheme.listMaxLines] / [AppTheme.listSoftWrap]，
-///   超长就省略号，保证一行一个信标；
+/// * **绝不换行**：超长一律省略号，保证一行一个信标；
 /// * 单击 → 详情页；双击 → 离线地图并居中。
 class StationTile extends StatelessWidget {
   const StationTile({
@@ -39,7 +40,6 @@ class StationTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ThemeData theme = Theme.of(context);
     final AppSettings settings = context.watch<AppSettings>();
 
     final DistanceView distance = Formats.distance(
@@ -59,94 +59,82 @@ class StationTile extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       onDoubleTap: onDoubleTap,
-      child: SizedBox(
-        height: 38, // 单行固定行高
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: Row(
-            children: <Widget>[
-              // ① 接收序号
-              SizedBox(
-                width: AppTheme.colSeq,
-                child: Text(
-                  '#${station.receiveSeq}',
-                  style: subtleStyle,
-                  textAlign: TextAlign.right,
-                  maxLines: AppTheme.listMaxLines,
-                  softWrap: AppTheme.listSoftWrap,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const SizedBox(width: AppTheme.rowGap),
-
-              // ② 呼号 + 设备图标（图标在呼号右侧）
-              Expanded(
-                child: Row(
-                  children: <Widget>[
-                    Flexible(
-                      child: Text(
-                        station.callsign,
-                        style: mainStyle, // 不加粗、不放大，与其它列同一个字号
-                        maxLines: AppTheme.listMaxLines,
-                        softWrap: AppTheme.listSoftWrap,
-                        overflow: TextOverflow.ellipsis,
+      child: AppTheme.clampTextScale(
+        child: SizedBox(
+          height: AppTheme.listRowHeight, // 单行固定行高
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              children: <Widget>[
+                // ① 呼号 + 设备图标（图标在呼号右侧）
+                Expanded(
+                  child: Row(
+                    children: <Widget>[
+                      Flexible(
+                        child: Text(
+                          station.callsign,
+                          style: mainStyle, // 不加粗、不放大，与其它列同一个字号
+                          maxLines: AppTheme.listMaxLines,
+                          softWrap: AppTheme.listSoftWrap,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 5),
-                    AprsSymbolIcon(
-                      icon: station.iconRaw,
-                      size: AppTheme.listIconSize,
-                      semanticLabel: station.iconLabel,
-                    ),
-                  ],
+                      const SizedBox(width: 5),
+                      AprsSymbolIcon(
+                        icon: station.iconRaw,
+                        size: AppTheme.listIconSize,
+                        semanticLabel: station.iconLabel,
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(width: AppTheme.rowGap),
+                const SizedBox(width: AppTheme.rowGap),
 
-              // ③ 方向：只有箭头，不显示度数
-              SizedBox(
-                width: AppTheme.colDir,
-                child: _DirectionArrow(courseDegrees: station.courseDegrees),
-              ),
-              const SizedBox(width: AppTheme.rowGap),
-
-              // ④ 距离
-              SizedBox(
-                width: AppTheme.colDistance,
-                child: Text(
-                  distance.text ?? '--',
-                  style: mainStyle,
-                  textAlign: TextAlign.right,
-                  maxLines: AppTheme.listMaxLines,
-                  softWrap: AppTheme.listSoftWrap,
-                  overflow: TextOverflow.ellipsis,
+                // ② 方向：只有箭头，不显示度数
+                SizedBox(
+                  width: AppTheme.colDir,
+                  child: _DirectionArrow(courseDegrees: station.courseDegrees),
                 ),
-              ),
-              const SizedBox(width: AppTheme.rowGap),
+                const SizedBox(width: AppTheme.rowGap),
 
-              // ⑤ 接收时间
-              SizedBox(
-                width: AppTheme.colTime,
-                child: Text(
-                  Formats.localTimeOnly(station.receivedAt),
-                  style: subtleStyle,
-                  textAlign: TextAlign.right,
-                  maxLines: AppTheme.listMaxLines,
-                  softWrap: AppTheme.listSoftWrap,
-                  overflow: TextOverflow.ellipsis,
+                // ③ 距离
+                SizedBox(
+                  width: AppTheme.colDistance,
+                  child: Text(
+                    distance.text ?? '--',
+                    style: mainStyle,
+                    textAlign: TextAlign.right,
+                    maxLines: AppTheme.listMaxLines,
+                    softWrap: AppTheme.listSoftWrap,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-              ),
+                const SizedBox(width: AppTheme.rowGap),
 
-              // 数据有问题的行：一个很轻的提示图标（不占额外行）
-              if (station.hasWarnings) ...<Widget>[
-                const SizedBox(width: 4),
-                Icon(
-                  Icons.error_outline,
-                  size: 13,
-                  color: theme.colorScheme.error,
+                // ④ 接收时间
+                SizedBox(
+                  width: AppTheme.colTime,
+                  child: Text(
+                    Formats.localTimeOnly(station.receivedAt),
+                    style: subtleStyle,
+                    textAlign: TextAlign.right,
+                    maxLines: AppTheme.listMaxLines,
+                    softWrap: AppTheme.listSoftWrap,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
+
+                // 数据有问题的行：一个很轻的提示图标（不占额外行）
+                if (station.hasWarnings) ...<Widget>[
+                  const SizedBox(width: 4),
+                  Icon(
+                    Icons.error_outline,
+                    size: 12,
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),
@@ -179,7 +167,7 @@ class _DirectionArrow extends StatelessWidget {
       angle: radians,
       child: Icon(
         Icons.navigation,
-        size: 17,
+        size: 16,
         color: AppTheme.green, // 绿色点缀
         semanticLabel: Formats.course(courseDegrees),
       ),

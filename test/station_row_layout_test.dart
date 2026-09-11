@@ -1,34 +1,30 @@
-import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pkwdwpl_lite/core/app_settings.dart';
 import 'package:pkwdwpl_lite/core/app_theme.dart';
-import 'package:pkwdwpl_lite/data/station_store.dart';
-import 'package:pkwdwpl_lite/main.dart';
 import 'package:pkwdwpl_lite/models/aprs_station.dart';
 import 'package:pkwdwpl_lite/models/geo_math.dart' show DistanceUnit;
 import 'package:pkwdwpl_lite/widgets/station_tile.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// 界面改版（「一个信标一行 + 字体统一」）的硬性约束测试。
+/// 台站列表行的硬性约束测试（每次改字号 / 列宽都要过一遍）：
 ///
-/// 三条约束：
-///   1. **一个信标一行** —— 每个列表项高度固定 38，不会因为文字换行被撑高；
-///   2. **字体统一** —— 所有列的字号都等于呼号的字号，呼号不加粗；
-///   3. 切换到英制单位（MI）后仍然单行。
+///   1. **一个信标一行** —— 行高固定，不因换行被撑高；
+///   2. **不显示接收序号** —— 需求明确要求去掉编号列；
+///   3. **字体统一** —— 所有列字号相同、且都不加粗；
+///   4. **系统字号放大也不塌** —— 列表内缩放被封顶（用户反馈
+///      「后面的字体都挤没了」，就是字号 14 + 系统放大导致的）；
+///   5. 切换距离单位（KM/MI）后仍单行。
 ///
-/// ⚠️ 三组断言刻意写在**同一个 testWidgets** 里：`EasyLocalization` 是单例，
-///    同一个测试文件里第二次 `pumpWidget` 会挂不上 widget 树
-///    （现象是 `find.byType(Scaffold)` 找不到任何东西，且没有报错信息），
-///    排查这个坑花了不少时间，所以这里固定一个测试只 pump 一次。
+/// 实现说明：这里**直接渲染 [StationTile]**，不渲染整个 App。
+/// 因为 `EasyLocalization` 是单例 —— 同一测试文件里第二次 `pumpWidget`
+/// 会挂不上 widget 树（现象：找不到 Scaffold 且没有任何报错），
+/// 那样就只能一个文件一个用例，没法在多种「屏宽 × 字号」下跑。
+/// StationTile 本身不调用 tr()，所以可以直接渲染。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  /// 行高（与 StationTile 里的 SizedBox(height:) 必须一致）。
-  const double rowHeight = 38;
-
-  /// 用真实校验和拼一条 `$PKWDWPL` 语句。
   String sentence({
     required String callsign,
     required String icon,
@@ -39,106 +35,150 @@ void main() {
     String altitude = '',
     String course = '',
     String distance = '',
-    String date = '110926',
   }) {
     final String body = <String>[
       'PKWDWPL', time, status, latDm, 'N', lonDm, 'E',
-      altitude, course, date, distance, callsign, icon,
+      altitude, course, '110926', distance, callsign, icon,
     ].join(',');
     return r'$' '$body*${NmeaChecksum.format(NmeaChecksum.computeFrom(body))}';
   }
 
-  testWidgets('列表：一个信标一行 + 字体统一 + 切英制仍单行', (WidgetTester tester) async {
-    // 360x640 逻辑像素（较窄的手机，最容易挤爆）
-    tester.view.physicalSize = const Size(1080, 1920);
-    tester.view.devicePixelRatio = 3.0;
-    addTearDown(tester.view.reset);
-
+  /// 在指定「屏宽 + 系统字号」下渲染 4 条真实台站，并逐条校验所有约束。
+  Future<void> verify({
+    required WidgetTester tester,
+    required double widthDp,
+    required double textScale,
+  }) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final AppSettings settings = await AppSettings.load();
 
+    final List<AprsStation> stations = <AprsStation>[
+      // 有航向 + 有距离 + 状态 A
+      AprsStationParser.parse(sentence(
+        callsign: 'BG1UBU-9', icon: '/j', time: '102353', status: 'A',
+        altitude: '4', course: '103', distance: '000050',
+      )),
+      // 长呼号、无航向、无距离
+      AprsStationParser.parse(sentence(
+        callsign: 'BI4PGN-11', icon: '/i', time: '102339',
+        latDm: '3958.55', lonDm: '11625.70',
+      )),
+      // 最长呼号
+      AprsStationParser.parse(sentence(
+        callsign: 'BG1QGD-10', icon: '/&', time: '102921',
+        latDm: '4000.46', lonDm: '11632.53', course: '359',
+      )),
+      AprsStationParser.parse(sentence(
+        callsign: 'BH3BBJ-1', icon: '/r', time: '102627',
+        latDm: '3907.80', lonDm: '11712.20',
+      )),
+    ];
+
     await tester.pumpWidget(
-      EasyLocalization(
-        supportedLocales: const <Locale>[Locale('zh', 'CN'), Locale('en', 'US')],
-        path: 'assets/translations',
-        fallbackLocale: const Locale('zh', 'CN'),
-        startLocale: const Locale('zh', 'CN'),
-        child: PkwdwplLiteApp(settings: settings),
+      MediaQuery(
+        // 模拟系统字号缩放
+        data: MediaQueryData(
+          size: Size(widthDp, 600),
+          textScaler: TextScaler.linear(textScale),
+        ),
+        child: ChangeNotifierProvider<AppSettings>.value(
+          value: settings,
+          child: MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: AppTheme.light(),
+            home: Scaffold(
+              backgroundColor: Colors.white,
+              body: SizedBox(
+                width: widthDp,
+                child: ListView(
+                  padding: EdgeInsets.zero,
+                  children: <Widget>[
+                    for (final AprsStation station in stations)
+                      StationTile(
+                        station: station,
+                        onTap: () {},
+                        onDoubleTap: () {},
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     );
-
-    // EasyLocalization 异步加载语言包，等主界面挂上
-    for (int i = 0; i < 40 && find.byType(Scaffold).evaluate().isEmpty; i++) {
-      await tester.pump(const Duration(milliseconds: 50));
-    }
-    expect(find.byType(Scaffold), findsWidgets, reason: '主界面没有挂载成功');
-
-    final BuildContext ctx = tester.element(find.byType(Scaffold).first);
-    final StationStore store = Provider.of<StationStore>(ctx, listen: false);
-
-    // 覆盖各种极端情况：长呼号、有/无航向、有/无距离、字段数异常
-    store.addRawLine(sentence(
-      callsign: 'BI4PGN-11', icon: '/i', time: '102339',
-      latDm: '3958.55', lonDm: '11625.70',
-    ));
-    store.addRawLine(sentence(
-      callsign: 'BG1UBU-9', icon: '/j', time: '102353', status: 'A',
-      altitude: '4', course: '103', distance: '000050',
-    ));
-    store.addRawLine(sentence(
-      callsign: 'BG1QGD-10', icon: '/&', time: '102921',
-      latDm: '4000.46', lonDm: '11632.53',
-    ));
-    store.addRawLine(sentence(
-      callsign: 'BH3BBJ-1', icon: '/r', time: '102627',
-      latDm: '3907.80', lonDm: '11712.20', course: '359',
-    ));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump(const Duration(milliseconds: 100));
 
-    expect(store.count, 4);
     final Finder tiles = find.byType(StationTile);
-    expect(tiles, findsNWidgets(4));
+    expect(tiles, findsNWidgets(stations.length));
 
-    // ---- 约束 1：一个信标一行（行高固定，未被换行撑高）----
-    for (int i = 0; i < 4; i++) {
+    final String ctxInfo = '${widthDp.toInt()}dp x$textScale';
+
+    // ---- 约束 1 & 4：一行一个信标；系统字号放大也不塌 ----
+    for (int i = 0; i < stations.length; i++) {
       expect(
         tester.getSize(tiles.at(i)).height,
-        rowHeight,
-        reason: '第 ${i + 1} 行高度不是 $rowHeight（说明有字段换行/溢出）',
+        AppTheme.listRowHeight,
+        reason: '$ctxInfo 下第 ${i + 1} 行高度异常（有字段换行或溢出）',
       );
     }
 
-    // ---- 约束 2：字体统一（所有列字号 == 呼号字号，且不加粗）----
-    final List<String> fields = <String>[
-      '#2', // 序号
-      'BG1UBU-9', // 呼号
-      '--', // 方向（该行无航向时显示 --）
-    ];
-    final List<TextStyle> styles = <TextStyle>[];
-    for (final String field in fields) {
-      final Finder f = find.text(field);
-      expect(f, findsWidgets, reason: '找不到字段「$field」');
-      styles.add((f.evaluate().first.widget as Text).style!);
+    // ---- 约束 2：不再显示接收序号 ----
+    for (int seq = 1; seq <= stations.length; seq++) {
+      expect(find.text('#$seq'), findsNothing,
+          reason: '$ctxInfo 下列表仍显示接收序号 #$seq');
     }
 
-    for (final TextStyle style in styles) {
-      expect(style.fontSize, AppTheme.listFontSize,
-          reason: '列表字段字号必须统一为 ${AppTheme.listFontSize}');
-      expect(style.fontWeight, FontWeight.w400,
-          reason: '呼号不得加粗（App 是记录日志用，不需要突出呼号）');
-      expect(style.fontFamily, AppTheme.monoFont,
-          reason: '列表统一等宽字体，保证固定列对齐');
+    // ---- 约束 3：字体统一（字号 / 粗细 / 字体族）----
+    //
+    // 不去按内容找字段（距离会随单位/字号变化、时间用的是本机接收时刻，
+    // 写死文案很脆），而是直接遍历**行内所有 Text**，逐个校验样式。
+    for (int i = 0; i < stations.length; i++) {
+      final Iterable<Element> texts =
+          find.descendant(of: tiles.at(i), matching: find.byType(Text)).evaluate();
+      expect(texts, isNotEmpty, reason: '$ctxInfo 第 ${i + 1} 行没有可校验的文本');
+      for (final Element e in texts) {
+        final String content = (e.widget as Text).data ?? '';
+        if (content.trim().isEmpty) continue; // 空占位不算
+        final TextStyle s = (e.widget as Text).style!;
+        expect(s.fontSize, AppTheme.listFontSize,
+            reason: '$ctxInfo 第 ${i + 1} 行「$content」字号 ${s.fontSize}'
+                ' ≠ 统一的 ${AppTheme.listFontSize}');
+        expect(s.fontWeight, FontWeight.w400,
+            reason: '$ctxInfo 第 ${i + 1} 行「$content」不应加粗');
+        expect(s.fontFamily, AppTheme.monoFont,
+            reason: '$ctxInfo 第 ${i + 1} 行「$content」字体族应为等宽');
+      }
     }
 
-    // ---- 约束 3：切到英制后仍不换行 ----
-    await Provider.of<AppSettings>(ctx, listen: false)
-        .setDistanceUnit(DistanceUnit.imperial);
+    // ---- 约束 5：切换距离单位后仍单行 ----
+    await settings.setDistanceUnit(
+      settings.distanceUnit == DistanceUnit.metric
+          ? DistanceUnit.imperial
+          : DistanceUnit.metric,
+    );
     await tester.pump();
-    final int count = tiles.evaluate().length;
-    for (int i = 0; i < count; i++) {
-      expect(tester.getSize(tiles.at(i)).height, rowHeight,
-          reason: '切换英制单位后第 ${i + 1} 行被撑高了');
+    for (int i = 0; i < stations.length; i++) {
+      expect(tester.getSize(tiles.at(i)).height, AppTheme.listRowHeight,
+          reason: '$ctxInfo 下切换距离单位后第 ${i + 1} 行被撑高');
     }
+  }
+
+  testWidgets('列表行约束：常见屏 + 默认字号', (WidgetTester tester) async {
+    await verify(tester: tester, widthDp: 360, textScale: 1.0);
+  });
+
+  testWidgets('列表行约束：小屏 + 系统字号 1.3x', (WidgetTester tester) async {
+    await verify(tester: tester, widthDp: 320, textScale: 1.3);
+  });
+
+  testWidgets('列表行约束：系统字号 1.5x（用户反馈的典型场景）',
+      (WidgetTester tester) async {
+    await verify(tester: tester, widthDp: 360, textScale: 1.5);
+  });
+
+  testWidgets('列表行约束：系统字号 2.0x（极端）', (WidgetTester tester) async {
+    await verify(tester: tester, widthDp: 411, textScale: 2.0);
   });
 }
