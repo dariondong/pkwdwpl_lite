@@ -273,7 +273,26 @@ Dart API 与上游 100% 一致；想换回 pub.dev 官方包改一行注释即�
 
 ## 8. Android 配置要点
 
-* `compileSdk = 36`、`targetSdk = 36`、`minSdk = 23`（满足「至少 API 34」）；
+* SDK 版本（`android/app/build.gradle.kts`）：
+
+  ```kotlin
+  compileSdk = flutter.compileSdkVersion   // Flutter 3.47 = 36
+  minSdk     = flutter.minSdkVersion
+  targetSdk  = flutter.targetSdkVersion    // Flutter 3.47 = 36
+  ```
+
+  满足「至少 API 34」的要求，并且用 `check()` 把这条钉死：
+  一旦将来 Flutter 把默认值降到 34 以下，配置阶段会立刻报错，而不是静默失守。
+
+  > ⚠️ **踩坑记录（2026-09-11）**：这三个值**必须写成 `flutter.xxxVersion` 这种扩展形式**，
+  > 不要写成字面量。写成 `compileSdk = 36` 时，AGP 9.1 在**配置阶段**直接报
+  > `Android Gradle Plugin: project ':app' does not specify compileSdk`，
+  > 构建失败，而且日志里没有任何前置错误提示，极难定位。
+  > 另外 Flutter 工具链每次构建前都会自动「迁移」这个文件（例如把
+  > `minSdk = 23` 改写成 `minSdk = flutter.minSdkVersion`，日志里会打印
+  > `Upgrading build.gradle.kts`），所以**不要依赖字面量**。
+  > CI（`.github/workflows/ci.yml`）里已加了一个失败时 dump 该文件内容的步骤，
+  > 方便下次直接看到「迁移之后」的实情。
 * 权限：
   * API ≤ 30：`BLUETOOTH` / `BLUETOOTH_ADMIN` / `ACCESS_FINE_LOCATION`（带 `maxSdkVersion="30"`）
   * API ≥ 31：`BLUETOOTH_SCAN`（`neverForLocation`）/ `BLUETOOTH_CONNECT`

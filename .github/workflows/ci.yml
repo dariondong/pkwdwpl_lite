@@ -85,6 +85,20 @@ jobs:
       - name: flutter build apk --debug
         run: flutter build apk --debug
 
+      # 构建失败时把关键文件打出来：Flutter 工具链会在构建前自动迁移
+      # （改写）android/app/build.gradle.kts，排错必须看到**迁移之后**的内容。
+      - name: Dump Gradle files on failure
+        if: failure()
+        run: |
+          echo "========== android/app/build.gradle.kts (after Flutter migration) =========="
+          cat -n android/app/build.gradle.kts || true
+          echo "========== android/build.gradle.kts =========="
+          cat -n android/build.gradle.kts || true
+          echo "========== android/gradle.properties =========="
+          cat -n android/gradle.properties || true
+          echo "========== android/settings.gradle.kts =========="
+          cat -n android/settings.gradle.kts || true
+
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
